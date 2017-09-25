@@ -43,20 +43,23 @@ void Scanner::Close()
 double* Scanner::Generate_Scan_Waveform()
 {
 	// Number of backwards (return) pixels
-	int back_pixels = (int)floor(output_rate / 1000.0); // minimum 1 millisecond return
-	
+	flyback_pixels = (int)floor(output_rate / 1000.0); // minimum 1 millisecond return
+
 	// Compute scan velocities (forward and backward) in volts/update (i.e. step size)
 	double forward_velocity = (2.0 * amplitude) / x_pixels;	// ...in volts/update
-	double back_velocity = (2.0 * amplitude) / back_pixels;	// ...in volts/update 
+	double back_velocity = (2.0 * amplitude) / flyback_pixels;	// ...in volts/update 
 
-	// Set turn acceleration and compute number of turn-around pixels
-	double turn_acceleration = 0.00001;
-	int turn_pixels = (int)floor((forward_velocity + back_velocity) / turn_acceleration);
+	// Report
+	std::cout << "Forward Velocity: " << forward_velocity << "\n";
+	std::cout << "Flyback Velocity: " << back_velocity << "\n";
+
+
+	// Perform Hermite cubic interpolation from end to start
+	double *flyback = Scanner::Hermite_Curve_Interpolate(flyback_pixels, amplitude, -amplitude, forward_velocity, -back_velocity);
 
 	// Compute the size of each scan segment: forward and flyback (turn, backward, turn)
-	int pixels_per_line = x_pixels + turn_pixels + back_pixels + turn_pixels;
-	pixels_per_frame = pixels_per_line * y_pixels;
-	flyback_pixels = turn_pixels + back_pixels + turn_pixels; // Set number of flyback pixels
+	int pixels_per_line = x_pixels + flyback_pixels;
+	pixels_per_frame = pixels_per_line * 1;
 
 	// Create space for scan waveform (both X and Y values)
 	double* scan_waveform;
@@ -64,7 +67,7 @@ double* Scanner::Generate_Scan_Waveform()
 
 	// Fill array with scan positions (voltages)
 	int offset = 0;
-	for (size_t i = 0; i < y_pixels; i++)
+	for (size_t i = 0; i < 1; i++)
 	{
 		// Go from -amp to +amp in +velocity steps
 		for (size_t i = 0; i < x_pixels; i++)
@@ -72,30 +75,12 @@ double* Scanner::Generate_Scan_Waveform()
 			scan_waveform[offset] = (-1.0 * amplitude) + (forward_velocity * i);
 			offset++;
 		}
-		// Then go from +amp to +amp in decelerating velocity steps
+		// Then insert flyback from +amp to +amp
 		double current_velocity = forward_velocity;
 		double current_position = amplitude;
-		for (size_t i = 0; i < turn_pixels; i++)
+		for (size_t i = 0; i < flyback_pixels; i++)
 		{
-			scan_waveform[offset] = current_position;
-			current_velocity -= turn_acceleration;
-			current_position += current_velocity;
-			offset++;
-		}
-		// Then go from +amp to -amp in -back_velocity steps
-		for (size_t i = 0; i < back_pixels; i++)
-		{
-			scan_waveform[offset] = (1.0 * amplitude) - (back_velocity * i);
-			offset++;
-		}
-		// Then go from -amp to -amp in accelerating velocity steps
-		current_velocity = -back_velocity;
-		current_position = -amplitude;
-		for (size_t i = 0; i < turn_pixels; i++)
-		{
-			scan_waveform[offset] = current_position;
-			current_velocity += turn_acceleration;
-			current_position += current_velocity;
+			scan_waveform[offset] = flyback[i];
 			offset++;
 		}
 	}
@@ -121,6 +106,27 @@ void Scanner::Save_Scan_Waveform(std::string path, double* waveform)
 	return;
 }
 
+// Helper Function: Hermite interpolation
+double* Scanner::Hermite_Curve_Interpolate(int steps, double y1, double y2, double slope1, double slope2)
+{
+	double* curve = (double*)malloc(sizeof(double)*steps);
+	for (size_t i = 0; i < steps; i++)
+	{
+		// Scale range from 0 to 1
+		double s = (double)i / double(steps);
+
+		// Compute Hermite basis functions
+		double h1 = (2.0 * s*s*s) - (3.0 * s*s) + 1.0;
+		double h2 = (-2.0 * s*s*s) + (3.0 * s*s);
+		double h3 = (s*s*s) - (2.0 * s*s) + s;
+		double h4 = (s*s*s) - (s*s);
+
+		// Compute interpolated point
+		double y = (h1 * y1) + (h2*y2) + (h3*slope1) + (h4*slope2);
+		curve[i] = y;
+	}
+	return curve;
+}
 
 // Scanner error callback function
 void Scanner::Error_Callback(int error, const char* description)

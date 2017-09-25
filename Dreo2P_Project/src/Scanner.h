@@ -46,6 +46,7 @@ private:
 	// Members
 
 	// Methods
+	double*	Hermite_Curve_Interpolate(int steps, double y1, double y2, double slope1, double slope2);
 	static void Error_Callback(int error, const char* description);	// NIDAQ error callback function
 };
 

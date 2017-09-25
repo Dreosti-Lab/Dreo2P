@@ -9,7 +9,7 @@ int main()
 	std::cout << "Dreo2P Console Version\n";
 
 	// Init scanner
-	Scanner scanner = Scanner(1.0, 5000000, 10000, 100, 100);
+	Scanner scanner = Scanner(1.0, 5000000, 200000, 1000, 1000);
 
 	// Generate scan waveform
 	std::cout << "Generating scan waveform...\n";
