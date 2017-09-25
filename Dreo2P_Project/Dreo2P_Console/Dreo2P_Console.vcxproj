@@ -21,11 +21,13 @@
   <ItemGroup>
     <ClCompile Include="..\deps\glfw\deps\glad.c" />
     <ClCompile Include="..\src\Display.cpp" />
+    <ClCompile Include="..\src\Scanner.cpp" />
     <ClCompile Include="src\main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\deps\glfw\deps\glad\glad.h" />
     <ClInclude Include="..\src\Display.h" />
+    <ClInclude Include="..\src\Scanner.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
