@@ -44,22 +44,17 @@ double* Scanner::Generate_Scan_Waveform()
 {
 	// Number of backwards (return) pixels
 	flyback_pixels = (int)floor(output_rate / 1000.0); // minimum 1 millisecond return
+	double ratio = x_pixels / flyback_pixels;
 
 	// Compute scan velocities (forward and backward) in volts/update (i.e. step size)
 	double forward_velocity = (2.0 * amplitude) / x_pixels;	// ...in volts/update
-	double back_velocity = (2.0 * amplitude) / flyback_pixels;	// ...in volts/update 
 
-	// Report
-	std::cout << "Forward Velocity: " << forward_velocity << "\n";
-	std::cout << "Flyback Velocity: " << back_velocity << "\n";
-
-
-	// Perform Hermite cubic interpolation from end to start
-	double *flyback = Scanner::Hermite_Curve_Interpolate(flyback_pixels, amplitude, -amplitude, forward_velocity, -back_velocity);
+	// Perform Hermite blend interpolation from end to start
+	double *flyback = Scanner::Hermite_Blend_Interpolate(flyback_pixels, amplitude, -amplitude, forward_velocity, forward_velocity);
 
 	// Compute the size of each scan segment: forward and flyback (turn, backward, turn)
 	int pixels_per_line = x_pixels + flyback_pixels;
-	pixels_per_frame = pixels_per_line * 1;
+	pixels_per_frame = pixels_per_line * y_pixels;
 
 	// Create space for scan waveform (both X and Y values)
 	double* scan_waveform;
@@ -67,7 +62,7 @@ double* Scanner::Generate_Scan_Waveform()
 
 	// Fill array with scan positions (voltages)
 	int offset = 0;
-	for (size_t i = 0; i < 1; i++)
+	for (size_t i = 0; i < y_pixels; i++)
 	{
 		// Go from -amp to +amp in +velocity steps
 		for (size_t i = 0; i < x_pixels; i++)
@@ -106,10 +101,12 @@ void Scanner::Save_Scan_Waveform(std::string path, double* waveform)
 	return;
 }
 
-// Helper Function: Hermite interpolation
-double* Scanner::Hermite_Curve_Interpolate(int steps, double y1, double y2, double slope1, double slope2)
+// Helper Function: Blend interpolation
+double* Scanner::Hermite_Blend_Interpolate(int steps, double y1, double y2, double slope1, double slope2)
 {
 	double* curve = (double*)malloc(sizeof(double)*steps);
+	double next_y1 = y1;
+	double next_y2 = y2 + (-slope2 * steps);
 	for (size_t i = 0; i < steps; i++)
 	{
 		// Scale range from 0 to 1
@@ -118,12 +115,14 @@ double* Scanner::Hermite_Curve_Interpolate(int steps, double y1, double y2, doub
 		// Compute Hermite basis functions
 		double h1 = (2.0 * s*s*s) - (3.0 * s*s) + 1.0;
 		double h2 = (-2.0 * s*s*s) + (3.0 * s*s);
-		double h3 = (s*s*s) - (2.0 * s*s) + s;
-		double h4 = (s*s*s) - (s*s);
 
 		// Compute interpolated point
-		double y = (h1 * y1) + (h2*y2) + (h3*slope1) + (h4*slope2);
+		double y = (h1 * next_y1) + (h2 * next_y2);
 		curve[i] = y;
+
+		// Increment
+		next_y1 += slope1;
+		next_y2 += slope2;
 	}
 	return curve;
 }

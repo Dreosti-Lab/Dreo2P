@@ -9,7 +9,7 @@ int main()
 	std::cout << "Dreo2P Console Version\n";
 
 	// Init scanner
-	Scanner scanner = Scanner(1.0, 5000000, 200000, 1000, 1000);
+	Scanner scanner = Scanner(1.0, 5000000, 400000, 1000, 10);
 
 	// Generate scan waveform
 	std::cout << "Generating scan waveform...\n";
@@ -17,10 +17,10 @@ int main()
 	std::cout << "Done.\n";
 
 	// Save scan waveform to a text file
-	std::string save_path = "waveform.csv";
-	std::cout << "Saving scan waveform...\n";
-	scanner.Save_Scan_Waveform(save_path, waveform);
-	std::cout << "Done.\n\n";
+	// std::string save_path = "waveform.csv";
+	// std::cout << "Saving scan waveform...\n";
+	// scanner.Save_Scan_Waveform(save_path, waveform);
+	// std::cout << "Done.\n\n";
 
 	// Report details
 	std::cout << "X Pixels: " << scanner.x_pixels << "\n";
