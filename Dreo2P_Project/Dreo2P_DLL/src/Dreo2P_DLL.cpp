@@ -12,6 +12,7 @@
 // Global DLL Variables
 //==========================================================
 Display display;
+
 // NIDAQ
 static TaskHandle  AItaskHandle = 0, AOtaskHandle = 0;
 
@@ -167,7 +168,7 @@ double* Generate_Scan_Waveforms(double amplitude, double input_rate, double outp
 int Initialize_Display(int width, int height)
 {
 	// Intialize Render
-	display.Initialize_Window(width, height);
+	display.Initialize_Window(512, 512);
 	display.Initialize_Render();
 
 	return 1;

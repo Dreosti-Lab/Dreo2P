@@ -1,23 +1,24 @@
 // Dreo2P Scanner Class (header)
 #pragma once
-#include "windows.h"
-#include <math.h>
-#include <NIDAQmx.h>
-#include <string>
-#include <fstream>
-
-
-//#include "Display.h"
-
 // Include STD headers
 #include <iostream>
+#include <fstream>
+#include <string>
+#include <thread>
+#include <math.h>
+
+// Inlcude Local Headers
+#include "windows.h"
+#include "NIDAQmx.h"
+#include "Display.h"
+
+// #include libtiff
 
 class Scanner
 {
 public:
-	// Constructors
-	Scanner();					// Create basic object reference
-	Scanner(double _amplitude,	// Initialize scan parameters
+	// Constructor
+	Scanner(double _amplitude,
 			double _input_rate,
 			double _output_rate,
 			int _x_pixels,
@@ -26,37 +27,44 @@ public:
 	// Destructors
 	~Scanner();
 
-	// Members (and defaults)
-	double amplitude = 1.0;			// Volts
-	double input_rate = 5000000.0;	// Hz
-	double output_rate = 250000.0;	// Hz
-	int x_pixels = 1024;
-	int y_pixels = 1024;
-	int flyback_pixels = -1;
-	int pixels_per_frame = -1;
+	// Members
+	Display display;
+	double amplitude;
+	double input_rate;
+	double output_rate;
+	int x_pixels;	
+	int y_pixels;
+	int flyback_pixels;
+	int pixels_per_frame;
+	int bin_factor;
 
-	// Thread Members
-	HANDLE hScanner_Thread;
-	DWORD ScannerThreadId;
-	DWORD ScannerThreadParam;
+	// Public Members (for acquisition thread)
+	std::thread scanner_thread;
+	bool volatile active = false;
 	bool volatile scanning = false;
 
-	// Methods
-	void Initialize();
+	// Public Methods
 	void Start();
 	void Stop();
 	void Close();
-	DWORD WINAPI ScannerThreadFunc(LPVOID lpParam);
 	
-	// Test Methods
-	double*	Generate_Scan_Waveform();
-	void Save_Scan_Waveform(std::string path, double* waveform);
-
 private:
-	// Members
 
-	// Methods
+	// Private Members
+	TaskHandle  DO_taskHandle = 0;
+	TaskHandle  AO_taskHandle = 0;
+	TaskHandle  AI_taskHandle = 0;
+
+	// Private Methods
+	void	ScannerThreadFunction();
+	void	Reset();
+
+	double*	Generate_Scan_Waveform();
+	void	Load_Scan_Waveform(double *waveform);
+	void	Set_Shutter_State(bool state);
+
+	void Save_Scan_Waveform(std::string path, double* waveform);
 	double*	Hermite_Blend_Interpolate(int steps, double y1, double y2, double slope1, double slope2);
-	static void Error_Callback(int error, const char* description);	// NIDAQ error callback function
+	static void Error_Callback(int error, const char* description);	// Scanner error callback function
 };
 
