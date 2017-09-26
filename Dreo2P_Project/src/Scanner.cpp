@@ -26,11 +26,45 @@ Scanner::~Scanner()
 {
 }
 
-// Initialize Scanner
-void Scanner::Configure()
+// Initialize Scanner: Open acquisiton thread
+void Scanner::Initialize()
 {
+	// Configure NI_DAQ
+
+	// Open window
+
+	// Start the scanning thread
+	hScanner_Thread = CreateThread(NULL, 100, (LPTHREAD_START_ROUTINE) ScannerThreadFunc, &ScannerThreadParam, 0, &ScannerThreadParam);
+	if (hScanner_Thread == NULL)
+	{
+		// Report?
+		exit(-1);
+	}
 	return;
 }
+
+// Scanner thread function
+DWORD WINAPI Scanner::ScannerThreadFunc(LPVOID lpParam)
+{
+	// Wait for scanning to start
+	while (!scanning)
+	{
+		Sleep(32);
+	}
+
+	// Scan acquisition loop
+	while (scanning)
+	{
+
+	}
+
+	return;
+}
+
+
+// Start
+
+// Stop
 
 // Close window (and terminate GLFW)
 void Scanner::Close()

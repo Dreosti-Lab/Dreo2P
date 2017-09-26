@@ -1,5 +1,6 @@
 // Dreo2P Scanner Class (header)
 #pragma once
+#include "windows.h"
 #include <math.h>
 #include <NIDAQmx.h>
 #include <string>
@@ -31,14 +32,23 @@ public:
 	double output_rate = 250000.0;	// Hz
 	int x_pixels = 1024;
 	int y_pixels = 1024;
-	int flyback_pixels = 512;
+	int flyback_pixels = -1;
 	int pixels_per_frame = -1;
 
+	// Thread Members
+	HANDLE hScanner_Thread;
+	DWORD ScannerThreadId;
+	DWORD ScannerThreadParam;
+	bool volatile scanning = false;
+
 	// Methods
-	void Configure();
-	void Start(double* scan_waveform);
+	void Initialize();
+	void Start();
 	void Stop();
 	void Close();
+	DWORD WINAPI ScannerThreadFunc(LPVOID lpParam);
+	
+	// Test Methods
 	double*	Generate_Scan_Waveform();
 	void Save_Scan_Waveform(std::string path, double* waveform);
 
