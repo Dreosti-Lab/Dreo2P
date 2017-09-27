@@ -100,7 +100,7 @@ void Scanner::Scanner_Thread_Function()
 			if (status) { Error_Handler(status, "AI Task start"); }
 			
 			// Report values read (summary)
-			std::cout << "Read: " << num_read << " " << photons[0] << "\n";
+			std::cout << "Read: " << num_read << " " << photons[0] << " -- " << photons[1] << " -- " << photons[400] << "\n";
 			Sleep(32);
 
 			// Increment frame counter
@@ -127,11 +127,13 @@ void Scanner::Scanner_Thread_Function()
 void Scanner::Reset()
 {
 	// Get scan start positions
-	double start_positions[2] = { scan_waveform_[0], scan_waveform_[1] };
+	double start_positions[4] = { scan_waveform_[0], scan_waveform_[0], scan_waveform_[1], scan_waveform_[1] };
 	int status = 0;
 
 	// Set mirrors to start position
-	DAQmxWriteAnalogF64(AO_taskHandle_, 1, 0, 1.0, DAQmx_Val_GroupByChannel, start_positions, NULL, NULL);
+	status = DAQmxResetWriteOffset(AO_taskHandle_);
+	if (status) { Error_Handler(status, "AO Write offset"); }
+	DAQmxWriteAnalogF64(AO_taskHandle_, 2, 0, 1.0, DAQmx_Val_GroupByChannel, start_positions, NULL, NULL);
 	DAQmxStartTask(AO_taskHandle_);
 	DAQmxStartTask(AI_taskHandle_);
 	DAQmxStopTask(AO_taskHandle_);
@@ -139,7 +141,9 @@ void Scanner::Reset()
 	if (status) { Error_Handler(status, "AI/AO Reset"); }
 
 	// Load full scan parameters to AO hardware and restart device
-	status = DAQmxWriteAnalogF64(AO_taskHandle_, pixels_per_frame_, FALSE, 30.0, DAQmx_Val_GroupByScanNumber, scan_waveform_, NULL, NULL);
+	DAQmxResetWriteOffset(AO_taskHandle_);
+	if (status) { Error_Handler(status, "AO Write offset"); }
+	status = DAQmxWriteAnalogF64(AO_taskHandle_, pixels_per_frame_, FALSE, 10.0, DAQmx_Val_GroupByScanNumber, scan_waveform_, NULL, NULL);
 	status = DAQmxStartTask(AO_taskHandle_);
 	if (status) { Error_Handler(status, "AO Restart"); }
 
