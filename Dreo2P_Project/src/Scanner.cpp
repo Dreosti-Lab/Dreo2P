@@ -3,45 +3,51 @@
 
 // Constructor
 Scanner::Scanner(
-	double _amplitude,
-	double _input_rate,
-	double _output_rate,
-	int _x_pixels,
-	int _y_pixels)
+	double	amplitude,
+	double	input_rate,
+	double	output_rate,
+	int		x_pixels,
+	int		y_pixels)
 {
 	// Set scan parameters
-	amplitude = _amplitude;
-	input_rate = _input_rate;
-	output_rate = _output_rate;
-	x_pixels = _x_pixels;
-	y_pixels = _y_pixels;
+	amplitude_ =	amplitude;
+	input_rate_ =	input_rate;
+	output_rate_ =	output_rate;
+	x_pixels_ =		x_pixels;
+	y_pixels_ =		y_pixels;
+
+	// Initialize error
+	int status = 0;
 
 	// Generate scan pattern
-	scan_waveform = Generate_Scan_Waveform();
+	scan_waveform_ = Generate_Scan_Waveform();
 
 	// Create and start digital output task (shutter controller)
-	Error_Handler(DAQmxCreateTask("", &DO_taskHandle), "DO CreateTask");
-	Error_Handler(DAQmxCreateDOChan(DO_taskHandle, "Dev1/port0/line0", "", DAQmx_Val_ChanPerLine), "DO CreateChannel");
-	Error_Handler(DAQmxStartTask(DO_taskHandle), "DO StartTask");
+	DAQmxCreateTask("", &DO_taskHandle_);
+	DAQmxCreateDOChan(DO_taskHandle_, "Dev1/port0/line0", "", DAQmx_Val_ChanPerLine);
+	status = DAQmxStartTask(DO_taskHandle_);
+	if (status) { Error_Handler(status, "DO Task setup"); }
 
 	// Create analog input task
-	Error_Handler(DAQmxCreateTask("", &AI_taskHandle), "AI CreateTask");
-	Error_Handler(DAQmxCreateAIVoltageChan(AI_taskHandle, "Dev1/ai0:1", "", DAQmx_Val_Cfg_Default, -10.0, 10.0, DAQmx_Val_Volts, NULL), "AI CreateChannel");
-	Error_Handler(DAQmxCfgSampClkTiming(AI_taskHandle, "", input_rate, DAQmx_Val_Rising, DAQmx_Val_ContSamps, pixels_per_frame * bin_factor), "AI ConfigureClock");
+	DAQmxCreateTask("", &AI_taskHandle_);
+	DAQmxCreateAIVoltageChan(AI_taskHandle_, "Dev1/ai0:1", "", DAQmx_Val_Cfg_Default, -10.0, 10.0, DAQmx_Val_Volts, NULL);
+	status = DAQmxCfgSampClkTiming(AI_taskHandle_, "", input_rate_, DAQmx_Val_Rising, DAQmx_Val_ContSamps, pixels_per_frame_ * bin_factor_);
+	if (status) { Error_Handler(status, "AI Task setup"); }
 
 	// Create analog output task
-	Error_Handler(DAQmxCreateTask("", &AO_taskHandle), "AO CreateTask");
-	Error_Handler(DAQmxCreateAOVoltageChan(AO_taskHandle, "Dev1/ao0:1", "", -10.0, 10.0, DAQmx_Val_Volts, NULL), "AO CreateChannel");
-	Error_Handler(DAQmxCfgSampClkTiming(AO_taskHandle, "", output_rate, DAQmx_Val_Rising, DAQmx_Val_ContSamps, pixels_per_frame), "AO ConfigureClock");
-	Error_Handler(DAQmxCfgDigEdgeStartTrig(AO_taskHandle, "/Dev1/ai/StartTrigger", DAQmx_Val_Rising), "AO ConfigureTrigger");
-	
+	DAQmxCreateTask("", &AO_taskHandle_);
+	DAQmxCreateAOVoltageChan(AO_taskHandle_, "Dev1/ao0:1", "", -10.0, 10.0, DAQmx_Val_Volts, NULL);
+	DAQmxCfgSampClkTiming(AO_taskHandle_, "", output_rate_, DAQmx_Val_Rising, DAQmx_Val_ContSamps, pixels_per_frame_);
+	status = DAQmxCfgDigEdgeStartTrig(AO_taskHandle_, "/Dev1/ai/StartTrigger", DAQmx_Val_Rising);
+	if (status) { Error_Handler(status, "AO Task setup"); }
+
 	// Configure GLFW display
-	display.Initialize_Window(256, 256);
-	display.Initialize_Render();
+	display_.Initialize_Window(256, 256);
+	display_.Initialize_Render();
 
 	// Start the scan acquisition thread
-	active = true;
-	scanner_thread = std::thread(&Scanner::ScannerThreadFunction, this);
+	active_ = true;
+	scanner_thread_ = std::thread(&Scanner::Scanner_Thread_Function, this);
 }
 
 // Destructor
@@ -50,43 +56,50 @@ Scanner::~Scanner()
 }
 
 // Scanner thread function
-void Scanner::ScannerThreadFunction()
+void Scanner::Scanner_Thread_Function()
 {
 	// Allocate space for input data
 	double* photons;
-	photons = (double *)malloc(sizeof(double) * pixels_per_frame);
+	photons = (double *)malloc(sizeof(double) * pixels_per_frame_);
+
+	// Initialize status
+	int status = 0;
 
 	// While the scanner thread is active
-	while (active)
+	while (active_)
 	{
 		// Reset mirror positions for next scan group
-		Reset();
+		Scanner::Reset();
 
 		// Wait for start signal
 		std::cout << "Waiting for start...";
-		while (!scanning && active)
+		while (!scanning_ && active_)
 		{
 			Sleep(32);
 		}
-		int frame_number = 0;
 
 		// Scan acquisition loop
-		while (scanning)
+		int frame_number = 0;
+		while (scanning_)
 		{
 			// If first scan...
 			if (frame_number == 0)
 			{
 				// Open shutter
-				Set_Shutter_State(true);
+				Scanner::Set_Shutter_State(true);
 
 				// Start hardware acqusition
-				Error_Handler(DAQmxStartTask(AI_taskHandle), "AI Start");
+				status = DAQmxStartTask(AI_taskHandle_);
+				if (status) { Error_Handler(status, "AI Task start"); }
 				std::cout << "Starting scanner.\n";
 			}
 
 			// Read data and for images/average/save
 			signed long num_read;
-			DAQmxReadAnalogF64(AI_taskHandle, -1, 1.0, DAQmx_Val_GroupByChannel, photons, pixels_per_frame, &num_read, NULL);
+			status = DAQmxReadAnalogF64(AI_taskHandle_, -1, 1.0, DAQmx_Val_GroupByChannel, photons, pixels_per_frame_, &num_read, NULL);
+			if (status) { Error_Handler(status, "AI Task start"); }
+			
+			// Report values read (summary)
 			std::cout << "Read: " << num_read << " " << photons[0] << "\n";
 			Sleep(32);
 
@@ -98,125 +111,144 @@ void Scanner::ScannerThreadFunction()
 		Set_Shutter_State(false);
 
 		// Stop analog input/output tasks
-		Error_Handler(DAQmxStopTask(AO_taskHandle), "AO Stop");
-		Error_Handler(DAQmxStopTask(AI_taskHandle), "AI Stop");
+		DAQmxStopTask(AO_taskHandle_);
+		status = DAQmxStopTask(AI_taskHandle_);
+		if (status) { Error_Handler(status, "AI/AO Task stop"); }
 		std::cout << "Stopping scanner.\n";
 	}
+
 	// Deallocate (thread) resources
 	free(photons);
-
 	return;
 }
+
 
 // Reset scanner
 void Scanner::Reset()
 {
 	// Get scan start positions
-	double start_positions[2] = { scan_waveform[0], scan_waveform[1] };
+	double start_positions[2] = { scan_waveform_[0], scan_waveform_[1] };
+	int status = 0;
 
 	// Set mirrors to start position
-	Error_Handler(DAQmxWriteAnalogF64(AO_taskHandle, 1, 0, 1.0, DAQmx_Val_GroupByChannel, start_positions, NULL, NULL), "AO WriteSample");
-	Error_Handler(DAQmxStartTask(AO_taskHandle), "AO Start");
-	Error_Handler(DAQmxStartTask(AI_taskHandle), "AI Start");
-	Error_Handler(DAQmxStopTask(AO_taskHandle), "AO Stop");
-	Error_Handler(DAQmxStopTask(AI_taskHandle), "AI Stop");
+	DAQmxWriteAnalogF64(AO_taskHandle_, 1, 0, 1.0, DAQmx_Val_GroupByChannel, start_positions, NULL, NULL);
+	DAQmxStartTask(AO_taskHandle_);
+	DAQmxStartTask(AI_taskHandle_);
+	DAQmxStopTask(AO_taskHandle_);
+	status = DAQmxStopTask(AI_taskHandle_);
+	if (status) { Error_Handler(status, "AI/AO Reset"); }
 
-	// Load full scan parameters to AO hardware device
-	Error_Handler(DAQmxWriteAnalogF64(AO_taskHandle, pixels_per_frame, FALSE, 30.0, DAQmx_Val_GroupByScanNumber, scan_waveform, NULL, NULL), "AO WriteWavefrom");
-	
-	// Start output task (awaiting input start trigger)
-	Error_Handler(DAQmxStartTask(AO_taskHandle), "AO Start");
+	// Load full scan parameters to AO hardware and restart device
+	status = DAQmxWriteAnalogF64(AO_taskHandle_, pixels_per_frame_, FALSE, 30.0, DAQmx_Val_GroupByScanNumber, scan_waveform_, NULL, NULL);
+	status = DAQmxStartTask(AO_taskHandle_);
+	if (status) { Error_Handler(status, "AO Restart"); }
 
 	return;
 }
+
 
 // Start scanning
 void Scanner::Start()
 {
 	// Start scanning loop (infinte or fixed number of frames)
-	scanning = true;
+	scanning_ = true;
 }
+
 
 // Stop scanning
 void Scanner::Stop()
 {
 	// End scanning loop
-	scanning = false;
+	scanning_ = false;
 }
+
 
 // Close scanner
 void Scanner::Close()
 {
-	// End scanning thread
-	active = false;
-	scanning = false;
-	scanner_thread.join();
+	// Initialize status
+	int status = 0;
 
-	// Close digital out (shutter controller)
-	Error_Handler(DAQmxStopTask(DO_taskHandle), "DO Stop");
-	Error_Handler(DAQmxClearTask(DO_taskHandle), "DO Clear");
+	// End scanning thread (if active)
+	if (active_)
+	{
+		active_ = false;
+		scanning_ = false;
+		scanner_thread_.join();
+	}
 
-	// Close analog out
-	Error_Handler(DAQmxClearTask(AO_taskHandle), "AO Clear");
-
-	// Close analog in
-	Error_Handler(DAQmxClearTask(AI_taskHandle), "AI Clear");
+	// Close NIDAQ tasks (if open)
+	if (DO_taskHandle_ != 0) {
+		DAQmxStopTask(DO_taskHandle_);
+		DAQmxClearTask(DO_taskHandle_);
+	}
+	if (AO_taskHandle_ != 0) {
+		DAQmxClearTask(AO_taskHandle_);
+	}
+	if (AI_taskHandle_ != 0) {
+		DAQmxClearTask(AI_taskHandle_);
+	}
 
 	// Close GLFW window
-	display.Close();
+	display_.Close();
+
+	// Free resources
+	free(scan_waveform_);
 }
+
 
 // Generate the X and Y voltages for a raster scan pattern (unidirectional)
 double* Scanner::Generate_Scan_Waveform()
 {
 	// Number of backwards (return) pixels
-	flyback_pixels = (int)floor(output_rate / 1000.0); // minimum 1 millisecond return
-	double ratio = x_pixels / flyback_pixels;
+	flyback_pixels_ = (int)floor(output_rate_ / 1000.0); // minimum 1 millisecond return
+	double ratio = x_pixels_ / flyback_pixels_;
 
 	// Compute scan velocities (forward and backward) in volts/update (i.e. step size)
-	double forward_velocity = (2.0 * amplitude) / x_pixels;	// ...in volts/update
+	double forward_velocity = (2.0 * amplitude_) / x_pixels_;	// ...in volts/update
 
 	// Perform Hermite blend interpolation from end to start
-	double *flyback = Scanner::Hermite_Blend_Interpolate(flyback_pixels, amplitude, -amplitude, forward_velocity, forward_velocity);
+	double *flyback = Scanner::Hermite_Blend_Interpolate(flyback_pixels_, amplitude_, -amplitude_, forward_velocity, forward_velocity);
 
 	// Compute the size of each scan segment: forward and flyback (turn, backward, turn)
-	int pixels_per_line = x_pixels + flyback_pixels;
-	pixels_per_frame = pixels_per_line * y_pixels;
-	bin_factor = (int)round(input_rate / output_rate);		// This must be an integer (multiple)
+	int pixels_per_line = x_pixels_ + flyback_pixels_;
+	pixels_per_frame_ = pixels_per_line * y_pixels_;
+	bin_factor_ = (int)round(input_rate_ / output_rate_);		// This must be an integer (multiple)
 
 	// Create space for scan waveform (both X and Y values)
 	double* scan_waveform;
-	scan_waveform = (double *)malloc(sizeof(double) * pixels_per_frame * 2);
+	scan_waveform = (double *)malloc(sizeof(double) * pixels_per_frame_ * 2);
 
 	// Fill array with scan positions (voltages)
 	int offset = 0;
-	for (size_t j = 0; j < y_pixels; j++)
+	for (size_t j = 0; j < y_pixels_; j++)
 	{
 		// Go from -amp to +amp in +velocity steps
-		for (size_t i = 0; i < x_pixels; i++)
+		for (size_t i = 0; i < x_pixels_; i++)
 		{
 			// X value
-			scan_waveform[offset] = (-1.0 * amplitude) + (forward_velocity * i);
+			scan_waveform[offset] = (-1.0 * amplitude_) + (forward_velocity * i);
 			offset++;
 			// Y value
-			scan_waveform[offset] = (-1.0 * amplitude) + (forward_velocity * j);	// This may not make sense! (assumes X = Y)
+			scan_waveform[offset] = (-1.0 * amplitude_) + (forward_velocity * j);	// This may not make sense! (assumes X = Y)
 			offset++;
 		}
 		// Then insert flyback from +amp to +amp
 		double current_velocity = forward_velocity;
-		double current_position = amplitude;
-		for (size_t i = 0; i < flyback_pixels; i++)
+		double current_position = amplitude_;
+		for (size_t i = 0; i < flyback_pixels_; i++)
 		{
 			// X value
 			scan_waveform[offset] = flyback[i];
 			offset++;
 			// Y value
-			scan_waveform[offset] = (-1.0 * amplitude) + (forward_velocity * j);	// This may not make sense! (assumes X = Y)
+			scan_waveform[offset] = (-1.0 * amplitude_) + (forward_velocity * j);	// This may not make sense! (assumes X = Y)
 			offset++;
 		}
 	}
 	return scan_waveform;
 }
+
 
 // Save scan waveform to local file (for debugging) as CSV (slow!)
 void Scanner::Save_Scan_Waveform(std::string path, double* waveform)
@@ -226,7 +258,7 @@ void Scanner::Save_Scan_Waveform(std::string path, double* waveform)
 	out_file.open(path, std::ios::out);
 	
 	// Write waveform data
-	for (size_t i = 0; i < pixels_per_frame; i++)
+	for (size_t i = 0; i < pixels_per_frame_; i++)
 	{
 		out_file << waveform[i] << ',';
 	}
@@ -236,6 +268,7 @@ void Scanner::Save_Scan_Waveform(std::string path, double* waveform)
 
 	return;
 }
+
 
 // Helper Function: Blend interpolation
 double* Scanner::Hermite_Blend_Interpolate(int steps, double y1, double y2, double slope1, double slope2)
@@ -263,6 +296,7 @@ double* Scanner::Hermite_Blend_Interpolate(int steps, double y1, double y2, doub
 	return curve;
 }
 
+
 // Control shutter state
 void Scanner::Set_Shutter_State(bool state)
 {
@@ -271,35 +305,24 @@ void Scanner::Set_Shutter_State(bool state)
 	data[0] = (state ? 1 : 0);
 
 	// Write shutter state
-	Error_Handler(DAQmxWriteDigitalU8(DO_taskHandle, 1, 1, 10.0, DAQmx_Val_GroupByChannel, data, NULL, NULL), "DO Write");
+	int status = DAQmxWriteDigitalU8(DO_taskHandle_, 1, 1, 10.0, DAQmx_Val_GroupByChannel, data, NULL, NULL);
+	if (status) { Error_Handler(status, "DO Write"); }
 
 	return;
 }
 
+
 // Scanner error callback function
 void Scanner::Error_Handler(int error, const char* description)
 {
-	// Check error code (0 = success)
-	if (error != 0)
-	{
 		// Report error
 		fprintf(stderr, "Error (%i): %s\n", error, description);
 
 		// Close gracefully
-		if (DO_taskHandle != 0) {
-			Error_Handler(DAQmxClearTask(DO_taskHandle), "DO Clear");
-		}
-		if (AO_taskHandle != 0) {
-			Error_Handler(DAQmxClearTask(AO_taskHandle), "AO Clear");
-		}
-		if (AI_taskHandle != 0) {
-			Error_Handler(DAQmxClearTask(AI_taskHandle), "AI Clear");
-		}
+		Scanner::Close();
 
-		// Free resources
-		free(scan_waveform);
-
-		// Break
+		// End application
 		exit(error);
-	}
 }
+
+// FIN
