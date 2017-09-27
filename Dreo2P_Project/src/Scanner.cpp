@@ -9,18 +9,32 @@ Scanner::Scanner(
 	int _x_pixels,
 	int _y_pixels)
 {
-	// Initialize scan parameters
+	// Set scan parameters
 	amplitude = _amplitude;
 	input_rate = _input_rate;
 	output_rate = _output_rate;
 	x_pixels = _x_pixels;
 	y_pixels = _y_pixels;
 
-	// Start digital out (shutter controller)
-	DAQmxCreateTask("", &DO_taskHandle);
-	DAQmxCreateDOChan(DO_taskHandle, "Dev1/port0/line0", "", DAQmx_Val_ChanPerLine);
-	DAQmxStartTask(DO_taskHandle);
+	// Generate scan pattern
+	scan_waveform = Generate_Scan_Waveform();
 
+	// Create and start digital output task (shutter controller)
+	Error_Handler(DAQmxCreateTask("", &DO_taskHandle), "DO CreateTask");
+	Error_Handler(DAQmxCreateDOChan(DO_taskHandle, "Dev1/port0/line0", "", DAQmx_Val_ChanPerLine), "DO CreateChannel");
+	Error_Handler(DAQmxStartTask(DO_taskHandle), "DO StartTask");
+
+	// Create analog input task
+	Error_Handler(DAQmxCreateTask("", &AI_taskHandle), "AI CreateTask");
+	Error_Handler(DAQmxCreateAIVoltageChan(AI_taskHandle, "Dev1/ai0:1", "", DAQmx_Val_Cfg_Default, -10.0, 10.0, DAQmx_Val_Volts, NULL), "AI CreateChannel");
+	Error_Handler(DAQmxCfgSampClkTiming(AI_taskHandle, "", input_rate, DAQmx_Val_Rising, DAQmx_Val_ContSamps, pixels_per_frame * bin_factor), "AI ConfigureClock");
+
+	// Create analog output task
+	Error_Handler(DAQmxCreateTask("", &AO_taskHandle), "AO CreateTask");
+	Error_Handler(DAQmxCreateAOVoltageChan(AO_taskHandle, "Dev1/ao0:1", "", -10.0, 10.0, DAQmx_Val_Volts, NULL), "AO CreateChannel");
+	Error_Handler(DAQmxCfgSampClkTiming(AO_taskHandle, "", output_rate, DAQmx_Val_Rising, DAQmx_Val_ContSamps, pixels_per_frame), "AO ConfigureClock");
+	Error_Handler(DAQmxCfgDigEdgeStartTrig(AO_taskHandle, "/Dev1/ai/StartTrigger", DAQmx_Val_Rising), "AO ConfigureTrigger");
+	
 	// Configure GLFW display
 	display.Initialize_Window(256, 256);
 	display.Initialize_Render();
@@ -38,76 +52,80 @@ Scanner::~Scanner()
 // Scanner thread function
 void Scanner::ScannerThreadFunction()
 {
+	// Allocate space for input data
+	double* photons;
+	photons = (double *)malloc(sizeof(double) * pixels_per_frame);
+
 	// While the scanner thread is active
 	while (active)
 	{
-		// Reset scanner for next session
-		std::cout << "Reset Scanner...\n";
+		// Reset mirror positions for next scan group
 		Reset();
 
-		// Wait for scanning start signal
+		// Wait for start signal
+		std::cout << "Waiting for start...";
 		while (!scanning && active)
 		{
 			Sleep(32);
-			std::cout << "Waiting...\n";
 		}
-
-		// Open Shutter
-		Set_Shutter_State(true);
-
-		// Start hardware acqusition
-		int res = DAQmxStartTask(AI_taskHandle);
-		std::cout << res << "\n";
-
-		double* photons;
-		photons = (double *)malloc(sizeof(double) * pixels_per_frame);
+		int frame_number = 0;
 
 		// Scan acquisition loop
 		while (scanning)
 		{
-			Sleep(32);
+			// If first scan...
+			if (frame_number == 0)
+			{
+				// Open shutter
+				Set_Shutter_State(true);
+
+				// Start hardware acqusition
+				Error_Handler(DAQmxStartTask(AI_taskHandle), "AI Start");
+				std::cout << "Starting scanner.\n";
+			}
+
+			// Read data and for images/average/save
 			signed long num_read;
 			DAQmxReadAnalogF64(AI_taskHandle, -1, 1.0, DAQmx_Val_GroupByChannel, photons, pixels_per_frame, &num_read, NULL);
+			std::cout << "Read: " << num_read << " " << photons[0] << "\n";
+			Sleep(32);
 
-			std::cout << "Read: " << num_read << "\n";
-
-			// Get data bits, save, display, etc.
+			// Increment frame counter
+			frame_number++;
 		}
 
-		// Close Shutter
+		// Close shutter
 		Set_Shutter_State(false);
 
-		// Close analog out
-		DAQmxStopTask(AO_taskHandle);
-		DAQmxClearTask(AO_taskHandle);
-
-		// Close analog in
-		DAQmxStopTask(AI_taskHandle);
-		DAQmxClearTask(AI_taskHandle);
+		// Stop analog input/output tasks
+		Error_Handler(DAQmxStopTask(AO_taskHandle), "AO Stop");
+		Error_Handler(DAQmxStopTask(AI_taskHandle), "AI Stop");
+		std::cout << "Stopping scanner.\n";
 	}
+	// Deallocate (thread) resources
+	free(photons);
+
 	return;
 }
 
 // Reset scanner
 void Scanner::Reset()
 {
-	// Generate scan pattern
-	double *waveform = Generate_Scan_Waveform();
-	double start_positions[2] = { waveform[0], waveform[1] };
-	// std::cout << "Start X: " << start_positions[0] << "\n";
-	// std::cout << "Start Y: " << start_positions[1] << "\n";
+	// Get scan start positions
+	double start_positions[2] = { scan_waveform[0], scan_waveform[1] };
 
 	// Set mirrors to start position
-	DAQmxCreateTask("", &AO_taskHandle);
-	DAQmxCreateAOVoltageChan(AO_taskHandle, "Dev1/ao0:1", "", -10.0, 10.0, DAQmx_Val_Volts, "");
-	DAQmxStartTask(AO_taskHandle);
-	DAQmxWriteAnalogF64(AO_taskHandle, 1, 1, 1.0, DAQmx_Val_GroupByChannel, start_positions, NULL, NULL);
-	DAQmxWaitUntilTaskDone(AO_taskHandle, 1.0);
-	DAQmxStopTask(AO_taskHandle);
-	DAQmxClearTask(AO_taskHandle);
+	Error_Handler(DAQmxWriteAnalogF64(AO_taskHandle, 1, 0, 1.0, DAQmx_Val_GroupByChannel, start_positions, NULL, NULL), "AO WriteSample");
+	Error_Handler(DAQmxStartTask(AO_taskHandle), "AO Start");
+	Error_Handler(DAQmxStartTask(AI_taskHandle), "AI Start");
+	Error_Handler(DAQmxStopTask(AO_taskHandle), "AO Stop");
+	Error_Handler(DAQmxStopTask(AI_taskHandle), "AI Stop");
 
-	// Load full scan parameters to hardware device (synchronous analog input/output)
-	Load_Scan_Waveform(waveform);
+	// Load full scan parameters to AO hardware device
+	Error_Handler(DAQmxWriteAnalogF64(AO_taskHandle, pixels_per_frame, FALSE, 30.0, DAQmx_Val_GroupByScanNumber, scan_waveform, NULL, NULL), "AO WriteWavefrom");
+	
+	// Start output task (awaiting input start trigger)
+	Error_Handler(DAQmxStartTask(AO_taskHandle), "AO Start");
 
 	return;
 }
@@ -135,8 +153,14 @@ void Scanner::Close()
 	scanner_thread.join();
 
 	// Close digital out (shutter controller)
-	DAQmxStopTask(DO_taskHandle);
-	DAQmxClearTask(DO_taskHandle);
+	Error_Handler(DAQmxStopTask(DO_taskHandle), "DO Stop");
+	Error_Handler(DAQmxClearTask(DO_taskHandle), "DO Clear");
+
+	// Close analog out
+	Error_Handler(DAQmxClearTask(AO_taskHandle), "AO Clear");
+
+	// Close analog in
+	Error_Handler(DAQmxClearTask(AI_taskHandle), "AI Clear");
 
 	// Close GLFW window
 	display.Close();
@@ -194,31 +218,6 @@ double* Scanner::Generate_Scan_Waveform()
 	return scan_waveform;
 }
 
-// Send scan parameters to NIDAq device
-void Scanner::Load_Scan_Waveform(double *waveform)
-{
-	// Setup input (read) operation
-	DAQmxCreateTask("", &AI_taskHandle);
-	DAQmxCreateAIVoltageChan(AI_taskHandle, "Dev1/ai0:1", "", DAQmx_Val_Cfg_Default, -10.0, 10.0, DAQmx_Val_Volts, NULL);
-	DAQmxCfgSampClkTiming(AI_taskHandle, "", input_rate, DAQmx_Val_Rising, DAQmx_Val_ContSamps, pixels_per_frame * bin_factor);
-
-	// Setup output (write) operation
-	std::cout << DAQmxCreateTask("", &AO_taskHandle);
-	std::cout << "\n";
-	std::cout << DAQmxCreateAOVoltageChan(AO_taskHandle, "Dev1/ao0:1", "", -10.0, 10.0, DAQmx_Val_Volts, NULL);
-	std::cout << "\n";
-	std::cout << DAQmxCfgSampClkTiming(AO_taskHandle, "", output_rate, DAQmx_Val_Rising, DAQmx_Val_ContSamps, pixels_per_frame);
-	std::cout << "\n";
-	std::cout << DAQmxCfgDigEdgeStartTrig(AO_taskHandle, "/Dev1/ai/StartTrigger", DAQmx_Val_Rising);
-	std::cout << "\n";
-	std::cout << DAQmxStartTask(AO_taskHandle); //  Waits for analog input start trigger
-	std::cout << "\n";
-	std::cout << DAQmxWriteAnalogF64(AO_taskHandle, pixels_per_frame, FALSE, 30.0, DAQmx_Val_GroupByScanNumber, waveform, NULL, NULL);
-	std::cout << "\n";
-
-	return;
-}
-
 // Save scan waveform to local file (for debugging) as CSV (slow!)
 void Scanner::Save_Scan_Waveform(std::string path, double* waveform)
 {
@@ -272,13 +271,35 @@ void Scanner::Set_Shutter_State(bool state)
 	data[0] = (state ? 1 : 0);
 
 	// Write shutter state
-	DAQmxWriteDigitalU8(DO_taskHandle, 1, 1, 10.0, DAQmx_Val_GroupByChannel, data, NULL, NULL);
+	Error_Handler(DAQmxWriteDigitalU8(DO_taskHandle, 1, 1, 10.0, DAQmx_Val_GroupByChannel, data, NULL, NULL), "DO Write");
 
 	return;
 }
 
 // Scanner error callback function
-void Scanner::Error_Callback(int error, const char* description)
+void Scanner::Error_Handler(int error, const char* description)
 {
-	fprintf(stderr, "Error (%i): %s\n", error, description);
+	// Check error code (0 = success)
+	if (error != 0)
+	{
+		// Report error
+		fprintf(stderr, "Error (%i): %s\n", error, description);
+
+		// Close gracefully
+		if (DO_taskHandle != 0) {
+			Error_Handler(DAQmxClearTask(DO_taskHandle), "DO Clear");
+		}
+		if (AO_taskHandle != 0) {
+			Error_Handler(DAQmxClearTask(AO_taskHandle), "AO Clear");
+		}
+		if (AI_taskHandle != 0) {
+			Error_Handler(DAQmxClearTask(AI_taskHandle), "AI Clear");
+		}
+
+		// Free resources
+		free(scan_waveform);
+
+		// Break
+		exit(error);
+	}
 }

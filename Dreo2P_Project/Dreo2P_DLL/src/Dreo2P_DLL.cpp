@@ -41,6 +41,8 @@ int		Initialize_Display(int width, int height);
 // Stop Scan  (stop scan acquisition, close shutter, stop scan)
 // Close	  (close everything cleanly, file, NIDAQ, OpenGL)
 
+// Open a console for error reporting and associate stdin/stdout with it!
+// BOOL WINAPI AllocConsole(void);
 
 // ---------------------------------
 // External Function Definitions

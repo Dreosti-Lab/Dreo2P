@@ -29,23 +29,24 @@ public:
 
 	// Members
 	Display display;
-	double amplitude;
-	double input_rate;
-	double output_rate;
-	int x_pixels;	
-	int y_pixels;
-	int flyback_pixels;
-	int pixels_per_frame;
-	int bin_factor;
+	double	amplitude;
+	double	input_rate;
+	double	output_rate;
+	int		x_pixels;	
+	int		y_pixels;
+	int		flyback_pixels;
+	int		pixels_per_frame;
+	int		bin_factor;
 
 	// Public Members (for acquisition thread)
-	std::thread scanner_thread;
-	bool volatile active = false;
-	bool volatile scanning = false;
+	std::thread		scanner_thread;
+	bool volatile	active = false;
+	bool volatile	scanning = false;
 
 	// Public Methods
 	void Start();
 	void Stop();
+	void Reset();
 	void Close();
 	
 private:
@@ -54,17 +55,16 @@ private:
 	TaskHandle  DO_taskHandle = 0;
 	TaskHandle  AO_taskHandle = 0;
 	TaskHandle  AI_taskHandle = 0;
+	double*		scan_waveform;
+
+	// Thread Function Method
+	void		ScannerThreadFunction();
 
 	// Private Methods
-	void	ScannerThreadFunction();
-	void	Reset();
-
-	double*	Generate_Scan_Waveform();
-	void	Load_Scan_Waveform(double *waveform);
-	void	Set_Shutter_State(bool state);
-
-	void Save_Scan_Waveform(std::string path, double* waveform);
-	double*	Hermite_Blend_Interpolate(int steps, double y1, double y2, double slope1, double slope2);
-	static void Error_Callback(int error, const char* description);	// Scanner error callback function
+	double*		Generate_Scan_Waveform();
+	void		Set_Shutter_State(bool state);
+	void		Save_Scan_Waveform(std::string path, double* waveform);
+	double*		Hermite_Blend_Interpolate(int steps, double y1, double y2, double slope1, double slope2);
+	void		Error_Handler(int error, const char* description);	// Scanner error handler function
 };
 
