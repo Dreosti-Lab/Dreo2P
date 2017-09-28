@@ -33,14 +33,18 @@ public:
 	void Initialize_Render();
 	void Render();
 	void Close();
+
 	void Set_Intensity(float intensity);
 
 private:
 	// Members
 	GLuint		vertex_shader, fragment_shader, program, vao;
 	GLint		max_location, vpos_location;
+	GLuint		frame_texture;
+	int			width_;
+	int			height_;
 
 	// Methods
-	static void Error_Handler(int error, const char* description);	// GLFW error callback function
+	static void Error_Handler(int error, const char* description);	//  Display error handler
 };
 

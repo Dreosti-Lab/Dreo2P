@@ -56,12 +56,12 @@ void Scanner::Scanner_Thread_Function()
 {
 	// Configure GLFW display (must be done in same thread as rendering)
 	Display display;
-	display.Initialize_Window(800, 600);
+	display.Initialize_Window(512, 512);
 	display.Initialize_Render();
 
 	// Allocate space for input data
-	double* photons;
-	photons = (double *)malloc(sizeof(double) * pixels_per_frame_);
+	double* input;
+	input = (double *)malloc(sizeof(double) * pixels_per_frame_);
 
 	// Initialize status
 	int status = 0;
@@ -97,11 +97,11 @@ void Scanner::Scanner_Thread_Function()
 
 			// Read data and for images/average/save
 			signed long num_read;
-			status = DAQmxReadAnalogF64(AI_taskHandle_, -1, 1.0, DAQmx_Val_GroupByChannel, photons, pixels_per_frame_, &num_read, NULL);
+			status = DAQmxReadAnalogF64(AI_taskHandle_, -1, 1.0, DAQmx_Val_GroupByChannel, input, pixels_per_frame_, &num_read, NULL);
 			if (status) { Error_Handler(status, "AI Task start"); }
 			
 			// Report values read (summary)
-			std::cout << "Read: " << num_read << " " << photons[0] << " -- " << photons[1] << " -- " << photons[400] << "\n";
+			std::cout << "Read: " << num_read << " " << input[0] << " -- " << input[1] << " -- " << input[400] << "\n";
 			Sleep(32);
 
 			// Display data
@@ -124,7 +124,7 @@ void Scanner::Scanner_Thread_Function()
 	}
 
 	// Deallocate (thread) resources
-	free(photons);
+	free(input);
 
 	// Close GLFW window
 	display.Close();
@@ -140,7 +140,7 @@ void Scanner::Reset()
 	double start_positions[4] = { scan_waveform_[0], scan_waveform_[0], scan_waveform_[1], scan_waveform_[1] };
 	int status = 0;
 
-	// Set mirrors to start position
+	// Set mirrors to start position (2 updates to flush buffer)
 	status = DAQmxResetWriteOffset(AO_taskHandle_);
 	if (status) { Error_Handler(status, "AO Write offset"); }
 	DAQmxWriteAnalogF64(AO_taskHandle_, 2, 0, 1.0, DAQmx_Val_GroupByChannel, start_positions, NULL, NULL);
