@@ -58,17 +58,24 @@ void Scanner::Scanner_Thread_Function()
 	Display display;
 	display.Initialize_Window(512, 512);
 	display.Initialize_Render();
+	display.Render(); // Display default frame
 
 	// Allocate space for input data
 	double* input_buffer;
 	double* ch0_buffer;
 	double* ch1_buffer;
+	float* display_frame;
 	int residual_samples = 0;
 
-	int buffer_size = (sizeof(double) * input_rate_) / 10;
+	int buffer_size = (int)round((sizeof(double) * input_rate_) / 10);
 	input_buffer = (double *)malloc(buffer_size * 2);		// Make buffer large enough to hold 100 ms of 2 channel data
 	ch0_buffer = (double *)malloc(buffer_size);				// Make buffer large enough to hold 100 ms of data
 	ch1_buffer = (double *)malloc(buffer_size);				// Make buffer large enough to hold 100 ms of data
+	display_frame = (float *)malloc(sizeof(float) * pixels_per_frame_ * 4);
+	for (size_t i = 0; i < sizeof(float) * pixels_per_frame_ * 4; i++)
+	{
+		display_frame[i] = 0.0f;
+	}
 
 	// Initialize status
 	int status = 0;
@@ -103,12 +110,20 @@ void Scanner::Scanner_Thread_Function()
 			}
 
 			// Read available input samples (all channels)
-			signed long num_read;
-			status = DAQmxReadAnalogF64(AI_taskHandle_, -1, 1.0, DAQmx_Val_GroupByScanNumber, input_buffer, pixels_per_frame_, &num_read, NULL);
+			int32 num_read;
+			status = DAQmxReadAnalogF64(AI_taskHandle_, -1, 1.0, DAQmx_Val_GroupByScanNumber, 
+										&input_buffer[residual_samples], buffer_size * 2, &num_read, NULL);
 			if (status) { Error_Handler(status, "AI Task read"); }
 			
-			// Append residual samples from previous read
+			// How many new samples (including left-over from previous scan)
+			int new_samples = num_read + residual_samples;
 
+			// Measure number of full scan lines acquired and store residual (partial line) samples
+			int samples_per_line = (x_pixels_ + flyback_pixels_) * bin_factor_;
+			int num_scan_lines = (int)floor(new_samples / samples_per_line);
+
+			// Append residual samples from previous read to input buffer
+			
 
 			// Seperate channels from raw input array and add after residual samples from previous frames
 			for (size_t i = 0; i < num_read; i+=2)
@@ -117,17 +132,15 @@ void Scanner::Scanner_Thread_Function()
 				ch1_buffer[i] = input_buffer[(i*2)+1];
 			}
 
-			// Measure number of full scan lines acquired
-			int samples_per_line = (x_pixels_ + flyback_pixels_) * bin_factor_;
-			int num_scan_lines = floor(num_read / samples_per_line);
-			residual_samples = num_read - (num_scan_lines * samples_per_line);
+			residual_samples = new_samples - (num_scan_lines * samples_per_line);
 
 
 			// Report values read (summary)
-			std::cout << "Residuals: " << residual_samples << "\n";
+			// std::cout << "Residuals: " << residual_samples << "\n";
 
 			// Display data
-			display.Set_Frame((ch0_buffer[0]+3.0f)/3.0f);
+//			display.Update_Frame((float)(ch0_buffer[0] + 3.0f)/3.0f);
+			display.Update_Frame((float)(ch0_buffer[0] + 10.0f) / 20.0f);
 
 			// Update texture
 			display.Render();
@@ -150,6 +163,7 @@ void Scanner::Scanner_Thread_Function()
 	free(input_buffer);
 	free(ch0_buffer);
 	free(ch1_buffer);
+	free(display_frame);
 
 	// Close GLFW window
 	display.Close();

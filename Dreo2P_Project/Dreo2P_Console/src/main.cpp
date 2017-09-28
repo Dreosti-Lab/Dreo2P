@@ -11,6 +11,7 @@ int main()
 
 	// Construct scanner
 	Scanner scanner(3.0, 500000, 100000, 200, 200);
+	Sleep(2000);
 
 	// Start scanning
 	scanner.Start();

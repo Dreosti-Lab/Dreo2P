@@ -9,10 +9,9 @@
 
 // Inlcude Local Headers
 #include "windows.h"
+#include "tiffio.h"
 #include "NIDAQmx.h"
 #include "Display.h"
-
-// #include libtiff
 
 class Scanner
 {

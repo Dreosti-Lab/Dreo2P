@@ -24,27 +24,27 @@ public:
 	// Destructors
 	~Display();
 
-	// Members
+	// Public Members
 	GLFWwindow* window_;
 	float intensity_ = 0.0f;
 
-	// Methods
+	// Public Methods
 	void Initialize_Window(int width, int height);
 	void Initialize_Render();
 	void Render();
 	void Close();
-
-	void Set_Frame(float intensity);
+	void Update_Frame(float intensity);
 
 private:
-	// Members
-	GLuint		vertex_shader, fragment_shader, program, vao;
+	// Private Members
+	GLuint		vertex_shader, fragment_shader, program;
+	GLuint		vertex_array_object;
 	GLint		max_location, vpos_location;
 	GLuint		frame_texture;
-	int			width_;
-	int			height_;
+	int			window_width_;
+	int			window_height_;
 
-	// Methods
+	// Private Methods
 	static void Error_Handler(int error, const char* description);	//  Display error handler
 };
 

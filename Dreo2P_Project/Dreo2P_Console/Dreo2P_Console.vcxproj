@@ -89,7 +89,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(SolutionDir)\deps\glfw\deps;$(SolutionDir)\deps\glfw\include;$(SolutionDir)\deps;$(SolutionDir)\deps\nidaq\include;$(SolutionDir)\src</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)\deps\glfw\deps;$(SolutionDir)\deps\glfw\include;$(SolutionDir)\deps\nidaq\include;$(SolutionDir)\deps\libtiff\include;$(SolutionDir)\deps;$(SolutionDir)\src</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <AdditionalDependencies>$(SolutionDir)\deps\glfw\lib\glfw3.lib;opengl32.lib;$(SolutionDir)\deps\nidaq\lib\NIDAQmx.lib;%(AdditionalDependencies)</AdditionalDependencies>
