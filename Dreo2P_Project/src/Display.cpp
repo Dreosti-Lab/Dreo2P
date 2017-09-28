@@ -65,9 +65,17 @@ void Display::Initialize_Window(int width, int height)
 }
 
 // Is not necessary...
-void Display::Set_Intensity(float intensity)
+void Display::Set_Frame(float intensity)
 {
 	intensity_ = intensity;
+
+	// Fill a test texture with float values
+	float* test_texture = (float*)malloc(sizeof(float) * width_ * height_ * 4);
+	for (int i = 0; i < (width_ * height_ * 4); i++) {
+		test_texture[i] = intensity_;
+	}
+	glBindTexture(GL_TEXTURE_2D, frame_texture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width_, height_, 0, GL_BGRA, GL_FLOAT, test_texture);
 }
 
 
@@ -75,7 +83,6 @@ void Display::Set_Intensity(float intensity)
 void Display::Initialize_Render()
 {
 	// Create texture for image data
-	std::cout << "Building texture...\n";
 	glGenTextures(1, &frame_texture);
 	glBindTexture(GL_TEXTURE_2D, frame_texture);
 
@@ -214,6 +221,7 @@ void Display::Render()
 
 	// Run shaders (draw points)
 	glUseProgram(program);
+
 
 	// Specify where texture uniform will be
 	glActiveTexture(GL_TEXTURE0);

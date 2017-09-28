@@ -34,7 +34,7 @@ public:
 	void Render();
 	void Close();
 
-	void Set_Intensity(float intensity);
+	void Set_Frame(float intensity);
 
 private:
 	// Members
