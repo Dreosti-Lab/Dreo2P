@@ -41,7 +41,6 @@ Scanner::Scanner(
 	status = DAQmxCfgDigEdgeStartTrig(AO_taskHandle_, "/Dev1/ai/StartTrigger", DAQmx_Val_Rising);
 	if (status) { Error_Handler(status, "AO Task setup"); }
 
-	display_.Initialize_Window(256, 256);
 	// Start the scan acquisition thread
 	active_ = true;
 	scanner_thread_ = std::thread(&Scanner::Scanner_Thread_Function, this);
