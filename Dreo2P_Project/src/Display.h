@@ -25,21 +25,22 @@ public:
 	~Display();
 
 	// Members
-	GLFWwindow* window;
+	GLFWwindow* window_;
+	float intensity_ = 0.0f;
 
 	// Methods
 	void Initialize_Window(int width, int height);
 	void Initialize_Render();
-	void Render(int num_voxels);
+	void Render();
 	void Close();
+	void Set_Intensity(float intensity);
 
 private:
 	// Members
-	GLuint		vertex_buffer;
-	GLuint		vertex_shader, fragment_shader, program;
-	GLint		mvp_location, vpos_location, vcol_location;
+	GLuint		vertex_shader, fragment_shader, program, vao;
+	GLint		max_location, vpos_location;
 
 	// Methods
-	static void Error_Callback(int error, const char* description);	// GLFW error callback function
+	static void Error_Handler(int error, const char* description);	// GLFW error callback function
 };
 

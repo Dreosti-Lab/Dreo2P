@@ -41,10 +41,7 @@ Scanner::Scanner(
 	status = DAQmxCfgDigEdgeStartTrig(AO_taskHandle_, "/Dev1/ai/StartTrigger", DAQmx_Val_Rising);
 	if (status) { Error_Handler(status, "AO Task setup"); }
 
-	// Configure GLFW display
 	display_.Initialize_Window(256, 256);
-	display_.Initialize_Render();
-
 	// Start the scan acquisition thread
 	active_ = true;
 	scanner_thread_ = std::thread(&Scanner::Scanner_Thread_Function, this);
@@ -58,6 +55,11 @@ Scanner::~Scanner()
 // Scanner thread function
 void Scanner::Scanner_Thread_Function()
 {
+	// Configure GLFW display (must be done in same thread as rendering)
+	Display display;
+	display.Initialize_Window(800, 600);
+	display.Initialize_Render();
+
 	// Allocate space for input data
 	double* photons;
 	photons = (double *)malloc(sizeof(double) * pixels_per_frame_);
@@ -100,8 +102,13 @@ void Scanner::Scanner_Thread_Function()
 			if (status) { Error_Handler(status, "AI Task start"); }
 			
 			// Report values read (summary)
-			std::cout << "Read: " << num_read << " " << photons[0] << "\n";
+			std::cout << "Read: " << num_read << " " << photons[0] << " -- " << photons[1] << " -- " << photons[400] << "\n";
 			Sleep(32);
+
+			// Display data
+			// Update texture
+			display.Set_Intensity(color_);	// Set min/max
+			display.Render();
 
 			// Increment frame counter
 			frame_number++;
@@ -119,6 +126,10 @@ void Scanner::Scanner_Thread_Function()
 
 	// Deallocate (thread) resources
 	free(photons);
+
+	// Close GLFW window
+	display.Close();
+
 	return;
 }
 
@@ -127,11 +138,13 @@ void Scanner::Scanner_Thread_Function()
 void Scanner::Reset()
 {
 	// Get scan start positions
-	double start_positions[2] = { scan_waveform_[0], scan_waveform_[1] };
+	double start_positions[4] = { scan_waveform_[0], scan_waveform_[0], scan_waveform_[1], scan_waveform_[1] };
 	int status = 0;
 
 	// Set mirrors to start position
-	DAQmxWriteAnalogF64(AO_taskHandle_, 1, 0, 1.0, DAQmx_Val_GroupByChannel, start_positions, NULL, NULL);
+	status = DAQmxResetWriteOffset(AO_taskHandle_);
+	if (status) { Error_Handler(status, "AO Write offset"); }
+	DAQmxWriteAnalogF64(AO_taskHandle_, 2, 0, 1.0, DAQmx_Val_GroupByChannel, start_positions, NULL, NULL);
 	DAQmxStartTask(AO_taskHandle_);
 	DAQmxStartTask(AI_taskHandle_);
 	DAQmxStopTask(AO_taskHandle_);
@@ -139,7 +152,9 @@ void Scanner::Reset()
 	if (status) { Error_Handler(status, "AI/AO Reset"); }
 
 	// Load full scan parameters to AO hardware and restart device
-	status = DAQmxWriteAnalogF64(AO_taskHandle_, pixels_per_frame_, FALSE, 30.0, DAQmx_Val_GroupByScanNumber, scan_waveform_, NULL, NULL);
+	DAQmxResetWriteOffset(AO_taskHandle_);
+	if (status) { Error_Handler(status, "AO Write offset"); }
+	status = DAQmxWriteAnalogF64(AO_taskHandle_, pixels_per_frame_, FALSE, 10.0, DAQmx_Val_GroupByScanNumber, scan_waveform_, NULL, NULL);
 	status = DAQmxStartTask(AO_taskHandle_);
 	if (status) { Error_Handler(status, "AO Restart"); }
 
@@ -188,9 +203,6 @@ void Scanner::Close()
 	if (AI_taskHandle_ != 0) {
 		DAQmxClearTask(AI_taskHandle_);
 	}
-
-	// Close GLFW window
-	display_.Close();
 
 	// Free resources
 	free(scan_waveform_);

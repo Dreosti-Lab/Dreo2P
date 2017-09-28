@@ -11,22 +11,11 @@ Display::~Display()
 {
 }
 
-/*
-// Load voxel data into a vertex buffer
-void Output::Load_Voxels(int num_voxels, const void* data)
-{
-	// Generate and bind vertex buffer
-	glGenBuffers(1, &vertex_buffer);
-	glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(Voxel) * num_voxels, data, GL_STATIC_DRAW);
-}
-*/
-
 // Initialize GLFW winodw
 void Display::Initialize_Window(int width, int height)
 {
 	// Set GLFW error callback function
-	glfwSetErrorCallback(Error_Callback);
+	glfwSetErrorCallback(Error_Handler);
 
 	// Initialize the GLFW library
 	if (!glfwInit())
@@ -34,49 +23,98 @@ void Display::Initialize_Window(int width, int height)
 		exit(EXIT_FAILURE);
 	}
 
+	// Specify OpenGL version (4.1)
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
+	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
 	// Create a windowed mode window and its OpenGL context
-	window = glfwCreateWindow(width, height, "Dreo2P - Live", NULL, NULL);
-	if (!window)
+	window_ = glfwCreateWindow(width, height, "Dreo2P - Live", NULL, NULL);
+	if (!window_)
 	{
 		glfwTerminate();
 		exit(EXIT_FAILURE);
 	}
 
 	// Make the window's context current
-	glfwMakeContextCurrent(window);
+	glfwMakeContextCurrent(window_);
 
 	// Start OpenGL extensions loader library (GLAD)
 	gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
 
-	// Hide cursor when in window
-	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
+	// Hide cursor when in window	
+	glfwSetInputMode(window_, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
+
+	// Get graphics hardware and OpenGL version info
+	const GLubyte* renderer = glGetString(GL_RENDERER); // get renderer string
+	const GLubyte* version = glGetString(GL_VERSION); // version as a string
+	printf("Renderer: %s\n", renderer);
+	printf("OpenGL version supported %s\n\n", version);
+
+	// Tell GL to only draw onto a pixel if the shape is closer to the viewer
+	glEnable(GL_DEPTH_TEST); // enable depth-testing
+	glDepthFunc(GL_LESS); // depth-testing interprets a smaller value as "closer"
 
 	// Set swap interval (vsync = 1)
 	glfwSwapInterval(1);
+}
+
+// Is not necessary...
+void Display::Set_Intensity(float intensity)
+{
+	intensity_ = intensity;
 }
 
 
 // Initialize rendering: load, compile and attach shaders and set vertex attribute arrays
 void Display::Initialize_Render()
 {
+	// Generate and bind vertex buffer (single full viewport quad)
+	GLuint	vertex_buffer;
+	glGenBuffers(1, &vertex_buffer);
+	glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
+	// XYZ-UV
+	float vertices[20] = { 
+		-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 
+		-1.0f,  1.0f, 0.0f, 0.0f, 1.0f,
+		 1.0f,  1.0f, 0.0f, 1.0f, 1.0f,
+		 1.0f, -1.0f, 0.0f, 1.0f, 0.0f };
+	glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 20, vertices, GL_STATIC_DRAW);
+
+	// Generate vertex attribute array
+	glGenVertexArrays(1, &vao);
+	glBindVertexArray(vao);
+
+	glEnableVertexAttribArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
+	glVertexAttribPointer(0, 5, GL_FLOAT, GL_FALSE, 0, NULL);
+
+	glEnableVertexAttribArray(1);
+	glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
+	glVertexAttribPointer(0, 5, GL_FLOAT, GL_FALSE, 0, NULL);
+
 	// Store shader text here for now...
+	// - Just render a full window Quad
 	static const char* vertex_shader_text =
-		"uniform mat4 MVP;\n"
-		"attribute vec3 vPos;\n"
-		"attribute vec4 vCol;\n"
-		"varying vec4 color;\n"
-		"void main()\n"
-		"{\n"
-		"    gl_Position = MVP * vec4(vPos, 1.0);\n"
-		"    color = vCol;\n"
+		"#version 400\n"
+		"in vec3 vp;\n"
+		"in vec2 uv;\n"
+		"out vec2 tex_coord;\n"
+		"void main() {\n"
+		"	tex_coord = uv;\n"
+		"	gl_Position = vec4(vp, 1.0);\n"
 		"}\n";
 
 	static const char* fragment_shader_text =
-		"varying vec4 color;\n"
-		"void main()\n"
-		"{\n"
-		"    gl_FragColor = color;\n"
-		"}\n";
+		"#version 400\n"
+		"#uniform sampler2d tex;\n"
+		"in vec2 tex_coord\n;"
+		"out vec4 frag_color;\n"
+		"void main() {\n"
+		"	frag_color = vec4(0.45,0.,0.,1.);"
+		"	#frag_color = tex(tex_coord);\n"
+		"}";
 
 	// Load and compile vertex shader
 	vertex_shader = glCreateShader(GL_VERTEX_SHADER);
@@ -94,69 +132,51 @@ void Display::Initialize_Render()
 	glAttachShader(program, fragment_shader);
 	glLinkProgram(program);
 
-	// Gather addresses of uniforms (matrices, vertex positions and colors)
-	mvp_location = glGetUniformLocation(program, "MVP");
-	vpos_location = glGetAttribLocation(program, "vPos");
-	vcol_location = glGetAttribLocation(program, "vCol");
-
-	// Enable vertex attribute arrays
-	glEnableVertexAttribArray(vpos_location);
-	glVertexAttribPointer(vpos_location, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 7, (void*)0);
-	glEnableVertexAttribArray(vcol_location);
-	glVertexAttribPointer(vcol_location, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 7, (void*)(sizeof(float) * 3));
+	// Gather addresses of uniforms (matrices, vertex positions, and colors)
+	//max_location = glGetUniformLocation(program, "max");
 }
 
 // Render (draw calls, rescaling, user view updates, etc.)
-void Display::Render(int num_voxels)
+void Display::Render()
 {
 	// Local variables
 	int width, height;
-	float aspect_ratio, h_angle, v_angle;
-	glm::mat4x4 m, v, p, mvp;
+	float aspect_ratio;
 	double time = glfwGetTime();
 
 	// Get framebuffer size and compute aspect ratio
-	glfwGetFramebufferSize(window, &width, &height);
+	glfwGetFramebufferSize(window_, &width, &height);
 	aspect_ratio = width / (float)height;
 
 	// Set viewport
 	glViewport(0, 0, width, height);
 
 	// Set clear color and clear buffer
-	glClearColor(0.0f, 0.0f, 0.0f, 1.f);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	// Create a MODEL matrix (identity)
-	m = glm::mat4(1.0);
-
-	// Create a VIEW matrix (LookAt target updated by mouse position)
+	// Get user input
 	double xpos, ypos;
-	glfwGetCursorPos(window, &xpos, &ypos);
-	h_angle = 2.0f*glm::pi<float>()*(float)(xpos / width);
-	v_angle = -1.0f*(glm::pi<float>()*(float)(ypos / height) + glm::pi<float>()/2.0f);
-	glm::vec3 eye = glm::vec3(0.0f, 1.5f, 0.0f);
-	glm::vec3 target = glm::vec3(glm::sin(h_angle) * glm::cos(v_angle), glm::sin(v_angle), glm::cos(v_angle) * glm::cos(h_angle));
-	glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
-	v = glm::lookAt(eye, eye + target, up);
-
-	// Create a PROJECTION matrix (perspective)
-	p = glm::perspective(glm::radians(90.0f), aspect_ratio, 0.1f, 100.f);
-	
-	// Compute MVP
-	mvp = p * v * m;
+	glfwGetCursorPos(window_, &xpos, &ypos);
 
 	// Run shaders (draw points)
 	glUseProgram(program);
-	glUniformMatrix4fv(mvp_location, 1, GL_FALSE, glm::value_ptr(mvp));
+	
+	glBindVertexArray(vao);
 
-	// DRAW VOXELS (as points for now)
-	glDrawArrays(GL_POINTS, 0, num_voxels);
+	// Update uniform?
+	//glUniformMatrix4fv(max_location, 1, GL_FALSE, glm::value_ptr(m));
 
-	// Swap buffers
-	glfwSwapBuffers(window);
+	// Draw Quad (as two triangles)
+	glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 
 	// Check for user input (or other events, e.g. window close)
 	glfwPollEvents();
+
+	// Swap buffers
+	glfwSwapBuffers(window_);
+
+	glGetError();
 }
 
 // Close window (and terminate GLFW)
@@ -166,7 +186,7 @@ void Display::Close()
 }
 
 // GLFW error callback function
-void Display::Error_Callback(int error, const char* description)
+void Display::Error_Handler(int error, const char* description)
 {
-	fprintf(stderr, "Error: %s\n", description);
+	fprintf(stderr, "Display Error: %s\n", description);
 }

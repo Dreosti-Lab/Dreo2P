@@ -27,8 +27,8 @@ public:
 	// Destructors
 	~Scanner();
 
-	// Public Members
-	Display display_;
+	// Public members
+	float color_ = 0.25f;
 
 	// Public Methods
 	void Start();
