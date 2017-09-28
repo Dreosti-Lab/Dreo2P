@@ -35,7 +35,8 @@
 #define TIFF_INT32_FORMAT "%d"
 
 /* Signed 32-bit type */
-#define TIFF_INT32_T signed int
+//#define TIFF_INT32_T signed int // Conflicts with NIDAQ
+#define TIFF_INT32_T signed long
 
 /* Unsigned 32-bit type formatter */
 #define TIFF_UINT32_FORMAT "%u"
