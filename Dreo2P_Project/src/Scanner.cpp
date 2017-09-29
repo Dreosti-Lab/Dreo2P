@@ -58,7 +58,13 @@ void Scanner::Scanner_Thread_Function()
 	Display display;
 	display.Initialize_Window(512, 512);
 	display.Initialize_Render();
+
+	// Load default image
+	float* default_frame = Load_Tiff_Frame_From_File("Dreo2P.tif");
+
+	display.Update_Frame(default_frame);
 	display.Render(); // Display default frame
+
 
 	// Allocate space for input data
 	double* input_buffer;
@@ -72,7 +78,7 @@ void Scanner::Scanner_Thread_Function()
 	ch0_buffer = (double *)malloc(buffer_size);				// Make buffer large enough to hold 100 ms of data
 	ch1_buffer = (double *)malloc(buffer_size);				// Make buffer large enough to hold 100 ms of data
 	display_frame = (float *)malloc(sizeof(float) * pixels_per_frame_ * 4);
-	for (size_t i = 0; i < sizeof(float) * pixels_per_frame_ * 4; i++)
+	for (size_t i = 0; i < pixels_per_frame_ * 4; i++)
 	{
 		display_frame[i] = 0.0f;
 	}
@@ -140,7 +146,7 @@ void Scanner::Scanner_Thread_Function()
 
 			// Display data
 //			display.Update_Frame((float)(ch0_buffer[0] + 3.0f)/3.0f);
-			display.Update_Frame((float)(ch0_buffer[0] + 10.0f) / 20.0f);
+//			display.Update_Frame((float)(ch0_buffer[0] + 10.0f) / 20.0f);
 
 			// Update texture
 			display.Render();
@@ -360,6 +366,43 @@ void Scanner::Set_Shutter_State(bool state)
 
 	return;
 }
+
+// Load a TIFF frame from a file
+float*	Scanner::Load_Tiff_Frame_From_File(char* path)
+{
+	TIFF* tif = TIFFOpen(path, "r");
+	float* frame = NULL;
+	if (tif) {
+		uint32 imagelength;
+		float* buf;
+		uint32 row;
+
+		TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &imagelength);
+		uint32 width = (int) TIFFScanlineSize(tif)/4;
+		uint32 height = imagelength;
+
+		buf = (float*) malloc(sizeof(float)*width);
+		frame = (float*)malloc(sizeof(float)*width*height*4);
+		
+		for (row = 0; row < height; row++)
+		{
+			TIFFReadScanline(tif, buf, row);
+			for (uint32 i = 0; i < width; i++)
+			{
+				frame[i + (row*width)] = buf[i];
+			}
+		}
+		free(buf);
+		TIFFClose(tif);
+
+		// Report
+		std::cout << width << " x " << height << "\n";
+
+	}
+
+	return frame;
+}
+
 
 
 // Scanner error callback function

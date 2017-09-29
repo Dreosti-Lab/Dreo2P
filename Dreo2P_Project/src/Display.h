@@ -33,7 +33,7 @@ public:
 	void Initialize_Render();
 	void Render();
 	void Close();
-	void Update_Frame(float intensity);
+	void Update_Frame(float* frame);
 
 private:
 	// Private Members

@@ -92,7 +92,7 @@
       <AdditionalIncludeDirectories>$(SolutionDir)\deps\glfw\deps;$(SolutionDir)\deps\glfw\include;$(SolutionDir)\deps\nidaq\include;$(SolutionDir)\deps\libtiff\include;$(SolutionDir)\deps;$(SolutionDir)\src</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>$(SolutionDir)\deps\glfw\lib\glfw3.lib;opengl32.lib;$(SolutionDir)\deps\nidaq\lib\NIDAQmx.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(SolutionDir)deps\glfw\lib\glfw3.lib;opengl32.lib;$(SolutionDir)deps\nidaq\lib\NIDAQmx.lib;$(SolutionDir)deps\libtiff\lib\libtiff.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">

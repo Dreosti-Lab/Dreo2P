@@ -67,6 +67,7 @@ private:
 	void		Set_Shutter_State(bool state);
 	void		Save_Scan_Waveform(std::string path, double* waveform);
 	double*		Hermite_Blend_Interpolate(int steps, double y1, double y2, double slope1, double slope2);
+	float*		Load_Tiff_Frame_From_File(char* path);
 	void		Error_Handler(int error, const char* description);	// Scanner error handler function
 };
 

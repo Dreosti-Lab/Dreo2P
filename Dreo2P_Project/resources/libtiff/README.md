@@ -9,4 +9,8 @@ Run:
 nmake /f Makefile.vc
 ```
 
+Make sure you use the x64 tools for Visual Studio (a different command prompt) to make a 64bit version of the libtiff.lib
+
 Good luck.
+
+- May confloct with NIDAQ (int32 redefintion)

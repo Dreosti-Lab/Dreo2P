@@ -67,15 +67,15 @@ void Display::Initialize_Window(int width, int height)
 }
 
 // Update display frame texture
-void Display::Update_Frame(float intensity)
+void Display::Update_Frame(float* frame)
 {
 	// Set display parameters
-	intensity_ = intensity;
+	//intensity_ = intensity;
 
 	// Fill a test texture with float values
 	float* texture_data = (float*)malloc(sizeof(float) * window_width_ * window_height_ * 4);
 	for (int i = 0; i < (window_width_ * window_height_ * 4); i++) {
-		texture_data[i] = intensity_;
+		texture_data[i] = frame[i];
 	}
 	// Bind texture object and create 2D RGBA (float) texture from data array
 	glBindTexture(GL_TEXTURE_2D, frame_texture);
@@ -122,10 +122,10 @@ void Display::Initialize_Render()
 	glBindBuffer(GL_ARRAY_BUFFER, uv_buffer);
 	// UV (Quad)
 	float uvs[8] = {
-		0.0f, 0.0f,
 		0.0f, 1.0f,
-		1.0f, 1.0f,
-		1.0f, 0.0f };
+		0.0f, 0.0f,
+		1.0f, 0.0f,
+		1.0f, 1.0f };
 	glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 8, uvs, GL_STATIC_DRAW);
 
 	// Generate vertex attribute array to store all VA calls
