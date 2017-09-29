@@ -14,6 +14,7 @@
 
 // Include STD headers
 #include <iostream>
+#include <thread>
 
 class Display
 {
@@ -26,25 +27,34 @@ public:
 
 	// Public Members
 	GLFWwindow* window_;
-	float intensity_ = 0.0f;
+	float*		frame_data_;
+	int			frame_width_;
+	int			frame_height_;
+	float		intensity_ = 0.0f;
 
 	// Public Methods
-	void Initialize_Window(int width, int height);
-	void Initialize_Render();
-	void Render();
 	void Close();
-	void Update_Frame(float* frame);
 
 private:
 	// Private Members
 	GLuint		vertex_shader, fragment_shader, program;
 	GLuint		vertex_array_object;
+	GLuint		frame_texture_;
 	GLint		max_location, vpos_location;
-	GLuint		frame_texture;
 	int			window_width_;
 	int			window_height_;
 
+	// Private Members (display thread)
+	std::thread		display_thread_;
+	bool volatile	active_ = false;
+
+	// Thread Function
+	void		Display_Thread_Function();
+
 	// Private Methods
+	void		Initialize_Window(int width, int height);
+	void		Initialize_Render();
+	void		Render();
+	void		Update_Frame();
 	static void Error_Handler(int error, const char* description);	//  Display error handler
 };
-

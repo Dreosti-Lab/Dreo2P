@@ -6,27 +6,16 @@
 
 int main()
 {
-	std::cout << "Dreo2P Console Version\n";
-	std::cout << "----------------------\n";
+	std::cout << "Dreo2P::Console Version\n";
+	std::cout << "-----------------------\n";
 
 	// Construct scanner
-	Scanner scanner(3.0, 500000, 100000, 200, 200);
-	Sleep(2000);
+	Scanner scanner(3.0, 500000, 100000, 1024, 1024);
+	Sleep(1000);
 
 	// Start scanning
 	scanner.Start();
-	Sleep(2000);
-
-	// Stop scanning
-	scanner.Stop();
-	Sleep(100);
-
-	// Adjust display param
-	scanner.color_ += 0.25f;
-
-	// Start scanning
-	scanner.Start();
-	Sleep(2000);
+	Sleep(30000);
 
 	// Stop scanning
 	scanner.Stop();

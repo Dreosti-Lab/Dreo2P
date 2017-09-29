@@ -23,20 +23,18 @@ public:
 			int		x_pixels,
 			int		y_pixels);
 
-	// Destructors
+	// Destructor
 	~Scanner();
 
-	// Public members
+	// Public members (display control)
 	float color_ = 0.25f;
 
 	// Public Methods
 	void Start();
 	void Stop();
-	void Reset();
 	void Close();
 	
 private:
-
 	// Private Members (NIDAQmx)
 	TaskHandle  DO_taskHandle_ = 0;
 	TaskHandle  AO_taskHandle_ = 0;
@@ -58,16 +56,16 @@ private:
 	bool volatile	active_ = false;
 	bool volatile	scanning_ = false;
 
-
 	// Thread Function
 	void		Scanner_Thread_Function();
 
 	// Private Methods
+	void		Reset_Mirrors();
 	double*		Generate_Scan_Waveform();
 	void		Set_Shutter_State(bool state);
 	void		Save_Scan_Waveform(std::string path, double* waveform);
 	double*		Hermite_Blend_Interpolate(int steps, double y1, double y2, double slope1, double slope2);
-	float*		Load_Tiff_Frame_From_File(char* path);
+	float*		Load_32f_1ch_Tiff_Frame_From_File(char* path, int* width, int* height);
 	void		Error_Handler(int error, const char* description);	// Scanner error handler function
 };
 

@@ -4,12 +4,36 @@
 // Constructor
 Display::Display()
 {
+	// Start the display thread
+	active_ = true;
+	display_thread_ = std::thread(&Display::Display_Thread_Function, this);
 }
+
 
 // Destructor
 Display::~Display()
 {
 }
+
+
+// Display thread function
+void Display::Display_Thread_Function()
+{
+	// Configure GLFW display (must be done in same thread as the rendering)
+	Display::Initialize_Window(512, 512);
+	Display::Initialize_Render();
+
+	// Run Render Loop
+	while (Display::active_)
+	{
+		// Update frame texture
+		Display::Update_Frame();
+
+		// Draw stuff
+		Display::Render();
+	}
+}
+
 
 // Initialize GLFW winodw
 void Display::Initialize_Window(int width, int height)
@@ -30,7 +54,7 @@ void Display::Initialize_Window(int width, int height)
 	// Specify OpenGL version (4.1)
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-	// glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // For older MacOS
+	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // For older MacOS
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
 	// Create a windowed mode window and its OpenGL context
@@ -66,29 +90,13 @@ void Display::Initialize_Window(int width, int height)
 	glfwSwapInterval(1);
 }
 
-// Update display frame texture
-void Display::Update_Frame(float* frame)
-{
-	// Set display parameters
-	//intensity_ = intensity;
-
-	// Fill a test texture with float values
-	float* texture_data = (float*)malloc(sizeof(float) * window_width_ * window_height_ * 4);
-	for (int i = 0; i < (window_width_ * window_height_ * 4); i++) {
-		texture_data[i] = frame[i];
-	}
-	// Bind texture object and create 2D RGBA (float) texture from data array
-	glBindTexture(GL_TEXTURE_2D, frame_texture);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, window_width_, window_height_, 0, GL_RGBA, GL_FLOAT, texture_data);
-}
-
 
 // Initialize rendering: compile/attach shaders and set vertex attribute arrays
 void Display::Initialize_Render()
 {
 	// Create texture object for display frame, bind texture for updating
-	glGenTextures(1, &frame_texture);
-	glBindTexture(GL_TEXTURE_2D, frame_texture);
+	glGenTextures(1, &frame_texture_);
+	glBindTexture(GL_TEXTURE_2D, frame_texture_);
 
 	// Set texture properties
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
@@ -104,6 +112,8 @@ void Display::Initialize_Render()
 		texture_data[i] = val*val;
 	}
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, window_width_, window_height_, 0, GL_RGBA, GL_FLOAT, texture_data);
+
+	std::cout << glfwGetError(NULL);
 
 	// Generate and bind vertex buffer (single full viewport quad with uv coordinates)
 	GLuint	vertex_buffer;
@@ -177,7 +187,7 @@ void Display::Initialize_Render()
 	char* buffer = (char*)malloc(sizeof(char) * log_length);
 	glGetShaderInfoLog(vertex_shader, log_length, &log_length, buffer);
 	printf(buffer);
-	std::cout << "--------------\n";
+	std::cout << "\n--------------\n";
 
 	// Load and compile fragment shader
 	fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);
@@ -202,7 +212,28 @@ void Display::Initialize_Render()
 
 	// Gather addresses of uniforms (matrices, vertex positions, and colors)
 	//max_location = glGetUniformLocation(program, "max");
+
+	return;
 }
+
+
+// Update display frame texture (must be called on the Display (OpenGL) thread)
+void Display::Update_Frame()
+{
+	// Build data aray (RGBA) from single channel frames
+	float* texture_data = (float*)malloc(sizeof(float) * frame_width_ * frame_height_ * 4);
+	for (int i = 0; i < (frame_width_ * frame_height_ * 4); i+=4) {
+		texture_data[i+0] = frame_data_[i/4];
+		texture_data[i+1] = frame_data_[i/4];
+		texture_data[i+2] = frame_data_[i/4];
+		texture_data[i+3] = frame_data_[i/4];
+	}
+	// Bind texture object and create 2D RGBA (float) texture from data array
+	glBindTexture(GL_TEXTURE_2D, frame_texture_);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, frame_width_, frame_height_, 0, GL_RGBA, GL_FLOAT, texture_data);
+	free(texture_data);
+}
+
 
 // Render (draw calls, rescaling, user view updates, etc.)
 void Display::Render()
@@ -233,7 +264,7 @@ void Display::Render()
 
 	// Specify where texture uniform is located
 	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, frame_texture);
+	glBindTexture(GL_TEXTURE_2D, frame_texture_);
 	glUniform1i(glGetUniformLocation(program, "tex"), 0);
 
 	// Specify which vertex attribute array object to use
@@ -252,11 +283,21 @@ void Display::Render()
 	glfwSwapBuffers(window_);
 }
 
-// Close window (and terminate GLFW)
+
+// Stop thread, close window (and terminate GLFW)
 void Display::Close()
 {
+	// End scanning thread (if active)
+	if (active_)
+	{
+		active_ = false;
+		display_thread_.join();
+	}
+
+	// Close GLFW window and terminate
 	glfwTerminate();
 }
+
 
 // Display error handler
 void Display::Error_Handler(int error, const char* description)

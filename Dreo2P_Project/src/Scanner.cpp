@@ -1,6 +1,7 @@
 // Dreo2P Scanner Class (source)
 #include "Scanner.h"
 
+
 // Constructor
 Scanner::Scanner(
 	double	amplitude,
@@ -46,25 +47,25 @@ Scanner::Scanner(
 	scanner_thread_ = std::thread(&Scanner::Scanner_Thread_Function, this);
 }
 
+
 // Destructor
 Scanner::~Scanner()
 {
 }
 
+
 // Scanner thread function
 void Scanner::Scanner_Thread_Function()
 {
-	// Configure GLFW display (must be done in same thread as the rendering)
+	// Open a GLFW (OpenGL) display window (on a seperate thread)
 	Display display;
-	display.Initialize_Window(512, 512);
-	display.Initialize_Render();
-
-	// Load default image
-	float* default_frame = Load_Tiff_Frame_From_File("Dreo2P.tif");
-
-	display.Update_Frame(default_frame);
-	display.Render(); // Display default frame
-
+	
+	// Load the default image (into memory shared with the display thread)
+	int image_width = 1024;
+	int image_height = 1024;
+	display.frame_data_ = Load_32f_1ch_Tiff_Frame_From_File("Dreo2P.tif", &image_width, &image_height);
+	display.frame_width_ = image_width;
+	display.frame_height_ = image_height;
 
 	// Allocate space for input data
 	double* input_buffer;
@@ -73,7 +74,7 @@ void Scanner::Scanner_Thread_Function()
 	float* display_frame;
 	int residual_samples = 0;
 
-	int buffer_size = (int)round((sizeof(double) * input_rate_) / 10);
+	int buffer_size = (int)round((sizeof(double) * input_rate_) / 1);
 	input_buffer = (double *)malloc(buffer_size * 2);		// Make buffer large enough to hold 100 ms of 2 channel data
 	ch0_buffer = (double *)malloc(buffer_size);				// Make buffer large enough to hold 100 ms of data
 	ch1_buffer = (double *)malloc(buffer_size);				// Make buffer large enough to hold 100 ms of data
@@ -90,7 +91,7 @@ void Scanner::Scanner_Thread_Function()
 	while (active_)
 	{
 		// Reset mirror positions for next scan group
-		Scanner::Reset();
+		Scanner::Reset_Mirrors();
 
 		// Wait for start signal
 		std::cout << "Waiting for start...";
@@ -144,19 +145,15 @@ void Scanner::Scanner_Thread_Function()
 			// Report values read (summary)
 			// std::cout << "Residuals: " << residual_samples << "\n";
 
-			// Display data
-//			display.Update_Frame((float)(ch0_buffer[0] + 3.0f)/3.0f);
-//			display.Update_Frame((float)(ch0_buffer[0] + 10.0f) / 20.0f);
-
-			// Update texture
-			display.Render();
+			// Sleep the thread for a bit (no need to update tooo quickly)
+			Sleep(32);
 
 			// Increment frame counter
-			frame_number++;
+			std::cout << frame_number++;
 		}
 
 		// Close shutter
-		Set_Shutter_State(false);
+		Scanner::Set_Shutter_State(false);
 
 		// Stop analog input/output tasks
 		DAQmxStopTask(AO_taskHandle_);
@@ -179,7 +176,7 @@ void Scanner::Scanner_Thread_Function()
 
 
 // Reset scanner
-void Scanner::Reset()
+void Scanner::Reset_Mirrors()
 {
 	// Get scan start positions
 	double start_positions[4] = { scan_waveform_[0], scan_waveform_[0], scan_waveform_[1], scan_waveform_[1] };
@@ -367,42 +364,45 @@ void Scanner::Set_Shutter_State(bool state)
 	return;
 }
 
-// Load a TIFF frame from a file
-float*	Scanner::Load_Tiff_Frame_From_File(char* path)
+
+// Load a float32 grayscale (single channel) TIFF frame from a file
+float* Scanner::Load_32f_1ch_Tiff_Frame_From_File(char* path, int* width, int* height)
 {
+	// Open TIFF file at specified path
 	TIFF* tif = TIFFOpen(path, "r");
 	float* frame = NULL;
 	if (tif) {
-		uint32 imagelength;
+		uint32 image_height;
 		float* buf;
 		uint32 row;
+		uint32 col;
 
-		TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &imagelength);
-		uint32 width = (int) TIFFScanlineSize(tif)/4;
-		uint32 height = imagelength;
+		TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &image_height);
+		uint32 image_width = (uint32)TIFFScanlineSize(tif)/4;
 
-		buf = (float*) malloc(sizeof(float)*width);
-		frame = (float*)malloc(sizeof(float)*width*height*4);
+		// Allocate spcae for scan lines and full frame
+		buf = (float*)malloc(sizeof(float)*image_width);
+		frame = (float*)malloc(sizeof(float)*image_width*image_height);
 		
-		for (row = 0; row < height; row++)
+		// Load data one line at a time
+		for (row = 0; row < image_height; row++)
 		{
 			TIFFReadScanline(tif, buf, row);
-			for (uint32 i = 0; i < width; i++)
+			for (col = 0; col < image_width; col++)
 			{
-				frame[i + (row*width)] = buf[i];
+				frame[col + (row*image_width)] = buf[col];
 			}
 		}
 		free(buf);
 		TIFFClose(tif);
-
-		// Report
-		std::cout << width << " x " << height << "\n";
-
+		*width = image_width;
+		*height = image_height;
+	} else {
+		*width = 0;
+		*height = 0;
 	}
-
 	return frame;
 }
-
 
 
 // Scanner error callback function
