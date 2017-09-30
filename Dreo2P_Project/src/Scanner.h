@@ -1,4 +1,5 @@
 // Dreo2P Scanner Class (header)
+
 #pragma once
 // Include STD headers
 #include <iostream>
@@ -27,9 +28,6 @@ public:
 	// Destructor
 	~Scanner();
 
-	// Public members (display control)
-	float color_ = 0.25f;
-
 	// Public Methods
 	void Start();
 	void Stop();
@@ -52,6 +50,11 @@ private:
 	int		pixels_per_frame_;
 	int		samples_per_line_;
 	int		bin_factor_;
+
+	// Private members (display control)
+	int		shift_ = 0;
+	float	min_ = 0.25f;
+	float	max_ = 0.25f;
 
 	// Private Members (acquisition thread)
 	std::thread		scanner_thread_;

@@ -21,7 +21,7 @@ class Display
 {
 public:
 	// Constructors
-	Display();	// Create basic object reference
+	Display(int width, int height);
 
 	// Destructors
 	~Display();
@@ -31,7 +31,7 @@ public:
 	std::vector<float>	frame_data_A_;
 	std::vector<float>	frame_data_B_;
 	std::vector<float>	texture_data_;
-	bool		use_A_ = false;
+	bool				use_A_ = false;
 
 	int			frame_width_;
 	int			frame_height_;

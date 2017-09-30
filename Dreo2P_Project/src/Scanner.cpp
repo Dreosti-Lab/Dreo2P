@@ -1,4 +1,5 @@
 // Dreo2P Scanner Class (source)
+
 #include "Scanner.h"
 #define _SCL_SECURE_NO_WARNINGS  
 
@@ -58,7 +59,7 @@ Scanner::~Scanner()
 void Scanner::Scanner_Thread_Function()
 {
 	// Open a GLFW (OpenGL) display window (on a seperate thread)
-	Display display;
+	Display display(1024, 1024);
 	
 	// Load the default image into memory shared with the display thread
 	int image_width = 1024;
@@ -78,8 +79,8 @@ void Scanner::Scanner_Thread_Function()
 	std::vector<float>	frame_ch1(x_pixels_*y_pixels_);
 	std::vector<float>	frame_display(x_pixels_*y_pixels_*4);
 
-	int		residual_samples = 0;
-	int		buffer_size	= (int)round((sizeof(double) * input_rate_) / 2);
+	int	residual_samples = 0;
+	int	buffer_size	= (int)round((sizeof(double) * input_rate_) / 2);
 	input_buffer = (double *)malloc(buffer_size * 2); // Make buffer large enough to hold 100 ms of 2 channel data
 	
 	// Initialize status
@@ -184,12 +185,10 @@ void Scanner::Scanner_Thread_Function()
 			if (display.use_A_)
 			{
 				std::copy(frame_ch0.begin(), frame_ch0.end(), display.frame_data_B_.begin());
-				//display.frame_data_B_.swap(frame_ch0);
 				display.use_A_ = false;
 			}
 			else {
 				std::copy(frame_ch0.begin(), frame_ch0.end(), display.frame_data_A_.begin());
-				//display.frame_data_A_.swap(frame_ch0);
 				display.use_A_ = true;
 			}
 			display.frame_width_ = x_pixels_;
@@ -205,7 +204,11 @@ void Scanner::Scanner_Thread_Function()
 			else {
 				std::cout << " B: ";
 			}
-			std::cout << frame_ch0[current_scan_line*x_pixels_ + 512] << " " << current_scan_line <<"\n";
+			if ((current_scan_line-1) >= 0)
+			{
+				std::cout << frame_ch0[(current_scan_line - 1)*x_pixels_] << " " << (current_scan_line - 1) << "\n";
+				display.intensity_ = (float)(current_scan_line - 1) / 10.0f;
+			}
 
 			// Sleep the thread for a bit (no need to update tooo quickly)
 			Sleep(16);

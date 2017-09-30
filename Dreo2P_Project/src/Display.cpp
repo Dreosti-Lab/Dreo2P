@@ -2,8 +2,12 @@
 #include "Display.h"
 
 // Constructor
-Display::Display()
+Display::Display(int width, int height)
 {
+	// Set window size members
+	frame_width_ = width;
+	frame_height_ = height;
+
 	// Start the display thread
 	active_ = true;
 	display_thread_ = std::thread(&Display::Display_Thread_Function, this);
@@ -113,15 +117,12 @@ void Display::Initialize_Render()
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 
 	// Load default texture from file
-	// For now...fill a test texture with float values
-	float* texture_data = (float*)malloc(sizeof(float) * window_width_ * window_height_ * 4);
+	texture_data_.resize(frame_width_*frame_height_*4);
 	for (int i = 0; i < (window_width_ * window_height_ * 4); i++) {
 		float val = 2.0f * (( (float)(i % (window_width_*4)) / (float)(window_width_*4)) - 0.5f);
-		texture_data[i] = val*val;
+		texture_data_[i] = val*val*val;
 	}
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, window_width_, window_height_, 0, GL_RGBA, GL_FLOAT, texture_data);
-
-	std::cout << glfwGetError(NULL);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, window_width_, window_height_, 0, GL_RGBA, GL_FLOAT, texture_data_.data());
 
 	// Generate and bind vertex buffer (single full viewport quad with uv coordinates)
 	GLuint	vertex_buffer;
@@ -175,10 +176,11 @@ void Display::Initialize_Render()
 	static const char* fragment_shader_text =
 		"#version 400\n"
 		"uniform sampler2D tex;\n"
+		"uniform float max;\n"
 		"in vec2 tex_coord;\n"
 		"out vec4 frag_color;\n"
 		"void main() {\n"
-		"	frag_color = texture(tex, tex_coord)/10.0f;\n"
+		"	frag_color = texture(tex, tex_coord)/max;\n"
 		"}\n";
 
 	// Load and compile vertex shader
@@ -219,7 +221,7 @@ void Display::Initialize_Render()
 	glLinkProgram(program);
 
 	// Gather addresses of uniforms (matrices, vertex positions, and colors)
-	//max_location = glGetUniformLocation(program, "max");
+	max_location = glGetUniformLocation(program, "max");
 
 	return;
 }
@@ -230,25 +232,12 @@ void Display::Update_Frame()
 {
 	// Build data aray (RGBA) from single channel frames
 	// - Double buffered
-	//texture_data_.resize(frame_width_ * frame_height_ * 4);
 	if (use_A_) {
 		std::copy(frame_data_A_.begin(), frame_data_A_.end(), texture_data_.begin());
-/*		for (int i = 0; i < (frame_width_ * frame_height_ * 4); i += 4) {
-			texture_data_[i + 0] = frame_data_A_[i/4];
-			texture_data_[i + 1] = frame_data_A_[i/4];
-			texture_data_[i + 2] = frame_data_A_[i/4];
-			texture_data_[i + 3] = 1.0f;
-		}
-*/	}
+	}
 	else {
 		std::copy(frame_data_B_.begin(), frame_data_B_.end(), texture_data_.begin());
-/*		for (int i = 0; i < (frame_width_ * frame_height_ * 4); i += 4) {
-			texture_data_[i + 0] = frame_data_B_[i / 4];
-			texture_data_[i + 1] = frame_data_B_[i / 4];
-			texture_data_[i + 2] = frame_data_B_[i / 4];
-			texture_data_[i + 3] = 1.0f;
-		}
-*/	}
+	}
 
 	// Need to specify this better!! GL_RED???
 
@@ -290,11 +279,11 @@ void Display::Render()
 	glBindTexture(GL_TEXTURE_2D, frame_texture_);
 	glUniform1i(glGetUniformLocation(program, "tex"), 0);
 
+	// Update uniform
+	glUniform1f(max_location, intensity_);
+
 	// Specify which vertex attribute array object to use
 	glBindVertexArray(vertex_array_object);
-
-	// Update uniform?
-	//glUniformMatrix4fv(max_location, 1, GL_FALSE, glm::value_ptr(m));
 	
 	// Draw Quad (as two triangles)
 	glDrawArrays(GL_TRIANGLE_FAN, 0, 4);

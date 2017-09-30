@@ -1,4 +1,5 @@
 // Dreo2P Console Application
+
 #include <iostream>
 #include <string>
 
@@ -10,7 +11,7 @@ int main()
 	std::cout << "-----------------------\n";
 
 	// Construct scanner
-	Scanner scanner(3.0, 5000000, 100000, 1024, 1024);
+	Scanner scanner(3.0, 5000000, 1000000, 1024, 1024);
 	Sleep(1000);
 
 	// Start scanning

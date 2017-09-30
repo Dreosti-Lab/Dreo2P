@@ -11,7 +11,7 @@
 
 // Global DLL Variables
 //==========================================================
-Display display;
+Display display(512, 512);;
 
 // NIDAQ
 static TaskHandle  AItaskHandle = 0, AOtaskHandle = 0;
