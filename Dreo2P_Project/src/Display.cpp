@@ -23,6 +23,11 @@ void Display::Display_Thread_Function()
 	Display::Initialize_Window(512, 512);
 	Display::Initialize_Render();
 
+	texture_data_.resize(1024 * 1024 * 4);
+	frame_data_A_.resize(1024 * 1024);
+	frame_data_B_.resize(1024 * 1024);
+
+	int frame_number = 0;
 	// Run Render Loop
 	while (Display::active_)
 	{
@@ -31,6 +36,9 @@ void Display::Display_Thread_Function()
 
 		// Draw stuff
 		Display::Render();
+
+//		std::cout << "Display Frame: " << frame_number << "\n";
+	
 	}
 }
 
@@ -170,7 +178,7 @@ void Display::Initialize_Render()
 		"in vec2 tex_coord;\n"
 		"out vec4 frag_color;\n"
 		"void main() {\n"
-		"	frag_color = texture(tex, tex_coord);\n"
+		"	frag_color = texture(tex, tex_coord)/10.0f;\n"
 		"}\n";
 
 	// Load and compile vertex shader
@@ -221,17 +229,32 @@ void Display::Initialize_Render()
 void Display::Update_Frame()
 {
 	// Build data aray (RGBA) from single channel frames
-	float* texture_data = (float*)malloc(sizeof(float) * frame_width_ * frame_height_ * 4);
-	for (int i = 0; i < (frame_width_ * frame_height_ * 4); i+=4) {
-		texture_data[i+0] = frame_data_[i/4];
-		texture_data[i+1] = frame_data_[i/4];
-		texture_data[i+2] = frame_data_[i/4];
-		texture_data[i+3] = frame_data_[i/4];
-	}
+	// - Double buffered
+	//texture_data_.resize(frame_width_ * frame_height_ * 4);
+	if (use_A_) {
+		std::copy(frame_data_A_.begin(), frame_data_A_.end(), texture_data_.begin());
+/*		for (int i = 0; i < (frame_width_ * frame_height_ * 4); i += 4) {
+			texture_data_[i + 0] = frame_data_A_[i/4];
+			texture_data_[i + 1] = frame_data_A_[i/4];
+			texture_data_[i + 2] = frame_data_A_[i/4];
+			texture_data_[i + 3] = 1.0f;
+		}
+*/	}
+	else {
+		std::copy(frame_data_B_.begin(), frame_data_B_.end(), texture_data_.begin());
+/*		for (int i = 0; i < (frame_width_ * frame_height_ * 4); i += 4) {
+			texture_data_[i + 0] = frame_data_B_[i / 4];
+			texture_data_[i + 1] = frame_data_B_[i / 4];
+			texture_data_[i + 2] = frame_data_B_[i / 4];
+			texture_data_[i + 3] = 1.0f;
+		}
+*/	}
+
+	// Need to specify this better!! GL_RED???
+
 	// Bind texture object and create 2D RGBA (float) texture from data array
 	glBindTexture(GL_TEXTURE_2D, frame_texture_);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, frame_width_, frame_height_, 0, GL_RGBA, GL_FLOAT, texture_data);
-	free(texture_data);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, frame_width_, frame_height_, 0, GL_RED, GL_FLOAT, texture_data_.data());
 }
 
 

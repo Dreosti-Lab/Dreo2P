@@ -1,6 +1,6 @@
 // Dreo2P Scanner Class (source)
 #include "Scanner.h"
-
+#define _SCL_SECURE_NO_WARNINGS  
 
 // Constructor
 Scanner::Scanner(
@@ -60,34 +60,36 @@ void Scanner::Scanner_Thread_Function()
 	// Open a GLFW (OpenGL) display window (on a seperate thread)
 	Display display;
 	
-	// Load the default image (into memory shared with the display thread)
+	// Load the default image into memory shared with the display thread
 	int image_width = 1024;
 	int image_height = 1024;
-	display.frame_data_ = Load_32f_1ch_Tiff_Frame_From_File("Dreo2P.tif", &image_width, &image_height);
+	int num_chans = 2;
+	display.frame_data_A_ = Load_32f_1ch_Tiff_Frame_From_File("Dreo2P.tif", &image_width, &image_height);
+	display.frame_data_B_ = Load_32f_1ch_Tiff_Frame_From_File("Dreo2P.tif", &image_width, &image_height);
+	//display.frame_data_A_.resize(x_pixels_*y_pixels_);
+	//display.frame_data_B_.resize(x_pixels_*y_pixels_);
 	display.frame_width_ = image_width;
 	display.frame_height_ = image_height;
+	display.use_A_ = true;
 
 	// Allocate space for input data
-	double* input_buffer;
-	double* ch0_buffer;
-	double* ch1_buffer;
-	float* display_frame;
-	int residual_samples = 0;
+	double*				input_buffer;
+	std::vector<float>	frame_ch0(x_pixels_*y_pixels_);
+	std::vector<float>	frame_ch1(x_pixels_*y_pixels_);
+	std::vector<float>	frame_display(x_pixels_*y_pixels_*4);
 
-	int buffer_size = (int)round((sizeof(double) * input_rate_) / 1);
-	input_buffer = (double *)malloc(buffer_size * 2);		// Make buffer large enough to hold 100 ms of 2 channel data
-	ch0_buffer = (double *)malloc(buffer_size);				// Make buffer large enough to hold 100 ms of data
-	ch1_buffer = (double *)malloc(buffer_size);				// Make buffer large enough to hold 100 ms of data
-	display_frame = (float *)malloc(sizeof(float) * pixels_per_frame_ * 4);
-	for (size_t i = 0; i < pixels_per_frame_ * 4; i++)
-	{
-		display_frame[i] = 0.0f;
-	}
-
+	int		residual_samples = 0;
+	int		buffer_size	= (int)round((sizeof(double) * input_rate_) / 2);
+	input_buffer = (double *)malloc(buffer_size * 2); // Make buffer large enough to hold 100 ms of 2 channel data
+	
 	// Initialize status
 	int status = 0;
 
-	// While the scanner thread is active
+	// Initial scan line counter
+	int current_scan_line = 0;
+
+	// Main thread loop...
+	// -------------------
 	while (active_)
 	{
 		// Reset mirror positions for next scan group
@@ -119,37 +121,94 @@ void Scanner::Scanner_Thread_Function()
 			// Read available input samples (all channels)
 			int32 num_read;
 			status = DAQmxReadAnalogF64(AI_taskHandle_, -1, 1.0, DAQmx_Val_GroupByScanNumber, 
-										&input_buffer[residual_samples], buffer_size * 2, &num_read, NULL);
+										&input_buffer[residual_samples*num_chans], buffer_size * 2, &num_read, NULL);
 			if (status) { Error_Handler(status, "AI Task read"); }
 			
-			// How many new samples (including left-over from previous scan)
+			// How many new samples (including left-over from previous scan)?
 			int new_samples = num_read + residual_samples;
 
 			// Measure number of full scan lines acquired and store residual (partial line) samples
-			int samples_per_line = (x_pixels_ + flyback_pixels_) * bin_factor_;
-			int num_scan_lines = (int)floor(new_samples / samples_per_line);
+			int full_scan_lines = (int)floor(new_samples / samples_per_line_);
 
-			// Append residual samples from previous read to input buffer
-			
-
-			// Seperate channels from raw input array and add after residual samples from previous frames
-			for (size_t i = 0; i < num_read; i+=2)
+			// Extract samples for each channel from interleaved data array, bin and sort into frames
+			for (int i = 0; i < full_scan_lines; i++)
 			{
-				ch0_buffer[i] = input_buffer[i*2];
-				ch1_buffer[i] = input_buffer[(i*2)+1];
+				// Check if we reach a new frame!!
+				if (current_scan_line == y_pixels_)
+				{
+					// Save data to TIFF file!
+
+					// Reset scan_line pointer
+					current_scan_line = 0;
+				}
+
+				int current_col = 0;
+				for (int j = 0; j < (samples_per_line_*num_chans); j += (num_chans*bin_factor_))
+				{
+					float ch0_accum = 0.0f;
+					float ch1_accum = 0.0f;
+					for (int b = 0; b < bin_factor_*num_chans; b+=num_chans)
+					{
+						int sample_ch0 = ((i*samples_per_line_*num_chans) + j) + b;
+						int sample_ch1 = ((i*samples_per_line_*num_chans) + j) + b + 1;
+
+						// read input and split channels
+						ch0_accum += (float)input_buffer[sample_ch0];
+						ch1_accum += (float)input_buffer[sample_ch1];
+					}
+					// Save average pixel value in image frames
+					if (current_col < x_pixels_)
+					{
+						frame_ch0[(current_scan_line * x_pixels_) + current_col] = ch0_accum / (float)bin_factor_;
+						frame_ch1[(current_scan_line * x_pixels_) + current_col] = ch1_accum / (float)bin_factor_;
+					}
+					// Increment column counter
+					current_col++;
+				}
+				// Increment scan line indicator
+				current_scan_line++;
 			}
 
-			residual_samples = new_samples - (num_scan_lines * samples_per_line);
+			// Append residual samples from previous read to input buffer
+			residual_samples = new_samples - (full_scan_lines * samples_per_line_);
+			int sample_offset = (full_scan_lines * samples_per_line_ * num_chans);
 
+			for (int r = 0; r < residual_samples*num_chans; r+=num_chans)
+			{
+				input_buffer[r] = input_buffer[sample_offset + r];
+				input_buffer[r + 1] = input_buffer[sample_offset + r + 1];
+			}
 
-			// Report values read (summary)
-			// std::cout << "Residuals: " << residual_samples << "\n";
-
-			// Sleep the thread for a bit (no need to update tooo quickly)
-			Sleep(32);
+			// Update display frame
+			int frame_size = display.frame_width_ * display.frame_height_;
+			if (display.use_A_)
+			{
+				std::copy(frame_ch0.begin(), frame_ch0.end(), display.frame_data_B_.begin());
+				//display.frame_data_B_.swap(frame_ch0);
+				display.use_A_ = false;
+			}
+			else {
+				std::copy(frame_ch0.begin(), frame_ch0.end(), display.frame_data_A_.begin());
+				//display.frame_data_A_.swap(frame_ch0);
+				display.use_A_ = true;
+			}
+			display.frame_width_ = x_pixels_;
+			display.frame_width_ = y_pixels_;
 
 			// Increment frame counter
-			std::cout << frame_number++;
+			frame_number++;
+			std::cout << "Frame: " << frame_number;
+			if (display.use_A_) 
+			{
+				std::cout << " A: ";
+			}
+			else {
+				std::cout << " B: ";
+			}
+			std::cout << frame_ch0[current_scan_line*x_pixels_ + 512] << " " << current_scan_line <<"\n";
+
+			// Sleep the thread for a bit (no need to update tooo quickly)
+			Sleep(16);
 		}
 
 		// Close shutter
@@ -164,9 +223,6 @@ void Scanner::Scanner_Thread_Function()
 
 	// Deallocate (thread) resources
 	free(input_buffer);
-	free(ch0_buffer);
-	free(ch1_buffer);
-	free(display_frame);
 
 	// Close GLFW window
 	display.Close();
@@ -267,6 +323,7 @@ double* Scanner::Generate_Scan_Waveform()
 	int pixels_per_line = x_pixels_ + flyback_pixels_;
 	pixels_per_frame_ = pixels_per_line * y_pixels_;
 	bin_factor_ = (int)round(input_rate_ / output_rate_);		// This must be an integer (multiple)
+	samples_per_line_ = (x_pixels_ + flyback_pixels_) * bin_factor_;
 
 	// Create space for scan waveform (both X and Y values)
 	double* scan_waveform;
@@ -366,11 +423,11 @@ void Scanner::Set_Shutter_State(bool state)
 
 
 // Load a float32 grayscale (single channel) TIFF frame from a file
-float* Scanner::Load_32f_1ch_Tiff_Frame_From_File(char* path, int* width, int* height)
+std::vector<float> Scanner::Load_32f_1ch_Tiff_Frame_From_File(char* path, int* width, int* height)
 {
 	// Open TIFF file at specified path
 	TIFF* tif = TIFFOpen(path, "r");
-	float* frame = NULL;
+	std::vector<float> frame;
 	if (tif) {
 		uint32 image_height;
 		float* buf;
@@ -382,7 +439,7 @@ float* Scanner::Load_32f_1ch_Tiff_Frame_From_File(char* path, int* width, int* h
 
 		// Allocate spcae for scan lines and full frame
 		buf = (float*)malloc(sizeof(float)*image_width);
-		frame = (float*)malloc(sizeof(float)*image_width*image_height);
+		frame.resize(image_width*image_height);
 		
 		// Load data one line at a time
 		for (row = 0; row < image_height; row++)

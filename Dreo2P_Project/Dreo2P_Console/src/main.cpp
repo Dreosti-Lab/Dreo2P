@@ -10,12 +10,12 @@ int main()
 	std::cout << "-----------------------\n";
 
 	// Construct scanner
-	Scanner scanner(3.0, 500000, 100000, 1024, 1024);
+	Scanner scanner(3.0, 5000000, 100000, 1024, 1024);
 	Sleep(1000);
 
 	// Start scanning
 	scanner.Start();
-	Sleep(30000);
+	Sleep(10000);
 
 	// Stop scanning
 	scanner.Stop();
