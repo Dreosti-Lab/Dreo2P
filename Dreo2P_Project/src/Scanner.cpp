@@ -9,15 +9,17 @@ Scanner::Scanner(
 	double	input_rate,
 	double	output_rate,
 	int		x_pixels,
-	int		y_pixels)
+	int		y_pixels,
+	int		frames_to_average)
 {
 	// Set scan parameters
-	amplitude_		= amplitude;
-	input_rate_		= input_rate;
-	output_rate_	= output_rate;
-	x_pixels_		= x_pixels;
-	y_pixels_		= y_pixels;
-	num_chans_		= 2;
+	amplitude_			= amplitude;
+	input_rate_			= input_rate;
+	output_rate_		= output_rate;
+	x_pixels_			= x_pixels;
+	y_pixels_			= y_pixels;
+	frames_to_average_	= frames_to_average;
+	num_chans_			= 2;
 
 	// Initialize error
 	int status = 0;
@@ -59,18 +61,24 @@ Scanner::~Scanner()
 // Scanner thread function
 void Scanner::Scanner_Thread_Function()
 {
-	// Open a GLFW (OpenGL) display window (on a seperate thread)
-	Display display(1024, 1024);
+	// Open a GLFW (OpenGL) display window (on a seperate thread) with frame sized texture buffer
+	Display display(x_pixels_, y_pixels_);
+
+	// Set display window size and position
+	// TO DO!!!
 	
-	// Load the default image into memory shared with the display thread
-	int image_width = 1024;
-	int image_height = 1024;
-	display.frame_data_A_ = Load_32f_1ch_Tiff_Frame_From_File("Dreo2P.tif", &image_width, &image_height);
-	display.frame_data_B_ = Load_32f_1ch_Tiff_Frame_From_File("Dreo2P.tif", &image_width, &image_height);
-	//display.frame_data_A_.resize(x_pixels_*y_pixels_);
-	//display.frame_data_B_.resize(x_pixels_*y_pixels_);
-	display.frame_width_ = image_width;
-	display.frame_height_ = image_height;
+	// Load the default image, resize, and load into memory shared with the display thread
+	int default_image_width;
+	int default_image_height;
+	std::vector<float> default_image_data = Load_32f_1ch_Tiff_Frame_From_File("Dreo2P.tif", &default_image_width, &default_image_height);
+	std::vector<float> default_frame_data(pixels_per_frame_);
+	// Fill default frame with data from default image
+	for (int i = 0; i < pixels_per_frame_; i++)
+	{
+		default_frame_data[i] = default_image_data[i % (default_image_width*default_image_height)];
+	}
+	// Set display frame to default image
+	std::copy(default_frame_data.begin(), default_frame_data.end(), display.frame_data_A_.begin());
 	display.use_A_ = true;
 
 	// Allocate space for analog input data
@@ -79,6 +87,17 @@ void Scanner::Scanner_Thread_Function()
 	std::vector<float>	frame_ch0(pixels_per_frame_);
 	std::vector<float>	frame_ch1(pixels_per_frame_);
 	std::vector<float>	frame_display(pixels_per_frame_ * 4);
+
+	// If saving, prepare TIFF file for writing
+	TIFF *frame_0_tiff = NULL;
+	TIFF *frame_1_tiff = NULL;
+	if (images_to_save_ > 0)
+	{
+		std::string frame_0_path = file_path_ + std::string("_0.tiff");
+		std::string frame_1_path = file_path_ + std::string("_1.tiff");
+		frame_0_tiff = TIFFOpen(frame_0_path.c_str(), "w");
+		frame_1_tiff = TIFFOpen(frame_1_path.c_str(), "w");
+	}
 
 	// Declare helper local variables
 	int	num_residual_samples = 0;
@@ -103,27 +122,30 @@ void Scanner::Scanner_Thread_Function()
 	while (active_)
 	{
 		// Reset mirror positions for next scan group
-		Scanner::Reset_Mirrors();
+		Reset_Mirrors();
 
 		// Wait for start signal
 		std::cout << "Waiting for start...";
 		while (!scanning_ && active_)
 		{
 			Sleep(32);
-			first_scan = true;
 		}
+		// Check if scanner completely closed
+		if (!active_) { break; }
 
 		// Scan acquisition loop
 		current_frame = 0;
 		current_line = 0;
 		current_column = 0;
+		num_residual_samples = 0;
+		first_scan = true;
 		while (scanning_)
 		{
 			// If first scan...open shutter and start acquisition
 			if (first_scan)
 			{
 				// Open shutter
-				Scanner::Set_Shutter_State(true);
+				Set_Shutter_State(true);
 
 				// Start hardware acqusition
 				status = DAQmxStartTask(AI_taskHandle_);
@@ -147,25 +169,26 @@ void Scanner::Scanner_Thread_Function()
 			// Extract samples for each channel from interleaved data array, bin, and sort into seperate frames (ignoring flyback)
 			for (int i = 0; i < num_full_scan_lines; i++)
 			{
-				// Check if we reach the end of a comple frame.
+				// Check if we reach the end of a complete frame...
 				if (current_line == y_pixels_)
 				{
 					// Report progress
-					std::cout << "Frame: " << current_frame;
-					if ((current_line - 1) >= 0)
-					{
-						std::cout << frame_ch0[(current_line - 1)*x_pixels_] << " " << (current_line - 1) << "\n";
-						display.intensity_ = (float)(current_line - 1) / 10.0f;
-					}
-
-					// Save data to TIFF file!!! update display stuff?
+					std::cout << "Frame: " << current_frame<< " of " << frames_to_average_ << std::endl;
 
 					// Reset scan_line pointer
 					current_line = 0;
+					current_column = 0;
 
 					// increment frame counter
 					current_frame++;
+
+					// Check if all frames have been averaged. If so, stop this scan group!
+					if (current_frame == frames_to_average_)
+					{
+						scanning_ = false;
+					}
 				}
+
 				// Loop though columns
 				current_column = 0;
 				for (int j = 0; j < (samples_per_line_*num_chans_); j += (num_chans_*bin_factor_))
@@ -191,6 +214,7 @@ void Scanner::Scanner_Thread_Function()
 					// Increment column counter
 					current_column++;
 				}
+				
 				// Increment scan line indicator
 				current_line++;
 			}
@@ -205,66 +229,64 @@ void Scanner::Scanner_Thread_Function()
 			}
 
 			// Update display frames (use double buffering!)
-			int frame_size = display.frame_width_ * display.frame_height_;
 			if (display.use_A_)
 			{
-				std::copy(frame_ch0.begin(), frame_ch0.end(), display.frame_data_B_.begin());
+				if (display_channel_ == 1)
+				{
+					std::copy(frame_ch1.begin(), frame_ch1.end(), display.frame_data_B_.begin());
+				}
+				else {
+					std::copy(frame_ch0.begin(), frame_ch0.end(), display.frame_data_B_.begin());
+				}
 				display.use_A_ = false;
 			}
 			else {
-				std::copy(frame_ch0.begin(), frame_ch0.end(), display.frame_data_A_.begin());
+				if (display_channel_ == 1)
+				{
+					std::copy(frame_ch1.begin(), frame_ch1.end(), display.frame_data_A_.begin());
+				}
+				else {
+					std::copy(frame_ch0.begin(), frame_ch0.end(), display.frame_data_A_.begin());
+				}
 				display.use_A_ = true;
 			}
-			display.frame_width_ = x_pixels_;
-			display.frame_width_ = y_pixels_;
 
 			// Sleep the thread for a bit (no need to update tooooooo quickly)
 			Sleep(16);
 		}
 
 		// Close shutter
-		Scanner::Set_Shutter_State(false);
+		Set_Shutter_State(false);
 
 		// Stop analog input/output tasks
 		DAQmxStopTask(AO_taskHandle_);
 		status = DAQmxStopTask(AI_taskHandle_);
 		if (status) { Error_Handler(status, "AI/AO Task stop"); }
 		std::cout << "Stopping scanner.\n";
+
+		// If saving, save (averaged) frame to TIFF stack
+		if (images_to_save_ > 0)
+		{
+			// Save frame 0
+			Scanner::Save_Frame_to_32f_1ch_Tiff(frame_0_tiff, frame_ch0, x_pixels_, y_pixels_, current_frame, images_to_save_);
+
+			// Save frame 1
+			Scanner::Save_Frame_to_32f_1ch_Tiff(frame_1_tiff, frame_ch1, x_pixels_, y_pixels_, current_frame, images_to_save_);
+		}
+		std::cout << "Saving averaged frame.\n";
+
+		// Go back and wait for the next "start" signal
 	}
 
 	// Free input buffer
 	free(input_buffer);
 
+	// Close TIFF files
+	TIFFClose(frame_0_tiff);
+	TIFFClose(frame_1_tiff);
+
 	// Close GLFW window and thread
 	display.Close();
-
-	return;
-}
-
-
-// Reset scanner
-void Scanner::Reset_Mirrors()
-{
-	// Get scan start positions
-	double start_positions[4] = { scan_waveform_[0], scan_waveform_[0], scan_waveform_[1], scan_waveform_[1] };
-	int status = 0;
-
-	// Set mirrors to start position (2 updates to flush buffer)
-	status = DAQmxResetWriteOffset(AO_taskHandle_);
-	if (status) { Error_Handler(status, "AO Write offset"); }
-	DAQmxWriteAnalogF64(AO_taskHandle_, 2, 0, 1.0, DAQmx_Val_GroupByChannel, start_positions, NULL, NULL);
-	DAQmxStartTask(AO_taskHandle_);
-	DAQmxStartTask(AI_taskHandle_);
-	DAQmxStopTask(AO_taskHandle_);
-	status = DAQmxStopTask(AI_taskHandle_);
-	if (status) { Error_Handler(status, "AI/AO Reset"); }
-
-	// Load full scan parameters to AO hardware and restart device
-	DAQmxResetWriteOffset(AO_taskHandle_);
-	if (status) { Error_Handler(status, "AO Write offset"); }
-	status = DAQmxWriteAnalogF64(AO_taskHandle_, pixels_per_scan_, FALSE, 10.0, DAQmx_Val_GroupByScanNumber, scan_waveform_, NULL, NULL);
-	status = DAQmxStartTask(AO_taskHandle_);
-	if (status) { Error_Handler(status, "AO Restart"); }
 
 	return;
 }
@@ -314,6 +336,56 @@ void Scanner::Close()
 
 	// Free resources
 	free(scan_waveform_);
+}
+
+
+// Update display parameters
+void Scanner::Configure_Display(int channel)
+{
+	display_channel_ = channel;
+}
+
+
+// Update display parameters
+void Scanner::Configure_Saving(char *path, int images_to_save)
+{
+	file_path_ = std::string(path);
+	images_to_save_ = images_to_save;
+}
+
+
+// Check is scanner is running
+bool Scanner::Is_Scanning()
+{
+	return scanning_;
+}
+
+
+// Reset scanner
+void Scanner::Reset_Mirrors()
+{
+	// Get scan start positions
+	double start_positions[4] = { scan_waveform_[0], scan_waveform_[0], scan_waveform_[1], scan_waveform_[1] };
+	int status = 0;
+
+	// Set mirrors to start position (2 updates to flush buffer)
+	status = DAQmxResetWriteOffset(AO_taskHandle_);
+	if (status) { Error_Handler(status, "AO Write offset"); }
+	DAQmxWriteAnalogF64(AO_taskHandle_, 2, 0, 1.0, DAQmx_Val_GroupByChannel, start_positions, NULL, NULL);
+	DAQmxStartTask(AO_taskHandle_);
+	DAQmxStartTask(AI_taskHandle_);
+	DAQmxStopTask(AO_taskHandle_);
+	status = DAQmxStopTask(AI_taskHandle_);
+	if (status) { Error_Handler(status, "AI/AO Reset"); }
+
+	// Load full scan parameters to AO hardware and restart device
+	DAQmxResetWriteOffset(AO_taskHandle_);
+	if (status) { Error_Handler(status, "AO Write offset"); }
+	status = DAQmxWriteAnalogF64(AO_taskHandle_, pixels_per_scan_, FALSE, 10.0, DAQmx_Val_GroupByScanNumber, scan_waveform_, NULL, NULL);
+	status = DAQmxStartTask(AO_taskHandle_);
+	if (status) { Error_Handler(status, "AO Restart"); }
+
+	return;
 }
 
 
@@ -476,6 +548,30 @@ std::vector<float> Scanner::Load_32f_1ch_Tiff_Frame_From_File(char* path, int* w
 		*height = 0;
 	}
 	return frame;
+}
+
+
+// Save a float32 grayscale (single channel) data frame to a TIFF file
+void Scanner::Save_Frame_to_32f_1ch_Tiff(TIFF *tiff_file, std::vector<float> data, int width, int height, int current_page, int total_pages)
+{
+	// Set Tiff parameters (frame 0)
+	TIFFSetField(tiff_file, TIFFTAG_IMAGEWIDTH, x_pixels_);
+	TIFFSetField(tiff_file, TIFFTAG_IMAGELENGTH, y_pixels_);
+	TIFFSetField(tiff_file, TIFFTAG_ROWSPERSTRIP, y_pixels_);
+	TIFFSetField(tiff_file, TIFFTAG_BITSPERSAMPLE, 32);
+	TIFFSetField(tiff_file, TIFFTAG_SAMPLESPERPIXEL, 1);
+	TIFFSetField(tiff_file, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_IEEEFP);
+	TIFFSetField(tiff_file, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
+	TIFFSetField(tiff_file, TIFFTAG_COMPRESSION, COMPRESSION_NONE);
+	TIFFSetField(tiff_file, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
+	TIFFSetField(tiff_file, TIFFTAG_FILLORDER, FILLORDER_MSB2LSB);
+	TIFFSetField(tiff_file, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
+	TIFFSetField(tiff_file, TIFFTAG_SUBFILETYPE, FILETYPE_PAGE);
+	TIFFSetField(tiff_file, TIFFTAG_PAGENUMBER, current_page, 0);
+
+	// Write frame data
+	TIFFWriteEncodedStrip(tiff_file, 0, data.data(), width*height*sizeof(float));
+	TIFFWriteDirectory(tiff_file);
 }
 
 

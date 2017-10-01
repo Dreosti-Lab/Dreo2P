@@ -21,7 +21,7 @@ class Display
 {
 public:
 	// Constructors
-	Display(int width, int height);
+	Display(int frame_width, int frame_height);
 
 	// Destructors
 	~Display();
@@ -30,24 +30,22 @@ public:
 	GLFWwindow*			window_;
 	std::vector<float>	frame_data_A_;
 	std::vector<float>	frame_data_B_;
-	std::vector<float>	texture_data_;
 	bool				use_A_ = false;
-
-	int			frame_width_;
-	int			frame_height_;
-	float		intensity_ = 0.0f;
+	int					frame_width_;
+	int					frame_height_;
+	float				intensity_ = 0.0f;
 
 	// Public Methods
 	void Close();
 
 private:
 	// Private Members
-	GLuint		vertex_shader, fragment_shader, program;
-	GLuint		vertex_array_object;
-	GLuint		frame_texture_;
-	GLint		max_location, vpos_location;
-	int			window_width_;
-	int			window_height_;
+	GLuint			vertex_shader, fragment_shader, program;
+	GLuint			vertex_array_object;
+	GLuint			frame_texture_;
+	GLint			max_location, vpos_location;
+	int				window_width_;
+	int				window_height_;
 
 	// Private Members (display thread)
 	std::thread		display_thread_;

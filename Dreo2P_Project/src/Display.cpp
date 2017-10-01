@@ -2,12 +2,17 @@
 #include "Display.h"
 
 // Constructor
-Display::Display(int width, int height)
+Display::Display(int frame_width, int frame_height)
 {
-	// Set window size members
-	frame_width_ = width;
-	frame_height_ = height;
+	// Set frame texture size parameters
+	frame_width_ = frame_width;
+	frame_height_ = frame_height;
+	use_A_ = true;
 
+	// Make space for frame texture data
+	frame_data_A_.resize(frame_width_ * frame_height_);
+	frame_data_B_.resize(frame_width_ * frame_height_);
+	
 	// Start the display thread
 	active_ = true;
 	display_thread_ = std::thread(&Display::Display_Thread_Function, this);
@@ -24,14 +29,9 @@ Display::~Display()
 void Display::Display_Thread_Function()
 {
 	// Configure GLFW display (must be done in same thread as the rendering)
-	Display::Initialize_Window(512, 512);
+	Display::Initialize_Window(1024, 1024);
 	Display::Initialize_Render();
 
-	texture_data_.resize(1024 * 1024 * 4);
-	frame_data_A_.resize(1024 * 1024);
-	frame_data_B_.resize(1024 * 1024);
-
-	int frame_number = 0;
 	// Run Render Loop
 	while (Display::active_)
 	{
@@ -40,9 +40,6 @@ void Display::Display_Thread_Function()
 
 		// Draw stuff
 		Display::Render();
-
-//		std::cout << "Display Frame: " << frame_number << "\n";
-	
 	}
 }
 
@@ -117,12 +114,7 @@ void Display::Initialize_Render()
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 
 	// Load default texture from file
-	texture_data_.resize(frame_width_*frame_height_*4);
-	for (int i = 0; i < (window_width_ * window_height_ * 4); i++) {
-		float val = 2.0f * (( (float)(i % (window_width_*4)) / (float)(window_width_*4)) - 0.5f);
-		texture_data_[i] = val*val*val;
-	}
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, window_width_, window_height_, 0, GL_RGBA, GL_FLOAT, texture_data_.data());
+	Display::Update_Frame();
 
 	// Generate and bind vertex buffer (single full viewport quad with uv coordinates)
 	GLuint	vertex_buffer;
@@ -180,7 +172,7 @@ void Display::Initialize_Render()
 		"in vec2 tex_coord;\n"
 		"out vec4 frag_color;\n"
 		"void main() {\n"
-		"	frag_color = texture(tex, tex_coord);\n"
+		"	frag_color.rgba = vec4(texture(tex, tex_coord).r);\n"
 		"}\n";
 
 	// Load and compile vertex shader
@@ -230,20 +222,15 @@ void Display::Initialize_Render()
 // Update display frame texture (must be called on the Display (OpenGL) thread)
 void Display::Update_Frame()
 {
-	// Build data aray (RGBA) from single channel frames
+	// Bind texture and update data
+	glBindTexture(GL_TEXTURE_2D, frame_texture_);
 	// - Double buffered
 	if (use_A_) {
-		std::copy(frame_data_A_.begin(), frame_data_A_.end(), texture_data_.begin());
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, frame_width_, frame_height_, 0, GL_RED, GL_FLOAT, frame_data_A_.data());
 	}
 	else {
-		std::copy(frame_data_B_.begin(), frame_data_B_.end(), texture_data_.begin());
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, frame_width_, frame_height_, 0, GL_RED, GL_FLOAT, frame_data_B_.data());
 	}
-
-	// Need to specify this better!! GL_RED???
-
-	// Bind texture object and create 2D RGBA (float) texture from data array
-	glBindTexture(GL_TEXTURE_2D, frame_texture_);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, frame_width_, frame_height_, 0, GL_RED, GL_FLOAT, texture_data_.data());
 }
 
 

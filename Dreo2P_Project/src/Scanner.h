@@ -6,6 +6,7 @@
 #include <fstream>
 #include <string>
 #include <thread>
+#include <atomic>
 #include <vector>
 #include <math.h>
 
@@ -23,7 +24,8 @@ public:
 			double	input_rate,
 			double	output_rate,
 			int		x_pixels,
-			int		y_pixels);
+			int		y_pixels,
+			int		frames_to_average_);
 
 	// Destructor
 	~Scanner();
@@ -32,7 +34,10 @@ public:
 	void Start();
 	void Stop();
 	void Close();
-	
+	bool Is_Scanning();
+	void Configure_Display(int channel);
+	void Configure_Saving(char *path, int images_to_save);
+
 private:
 	// Private Members (NIDAQmx)
 	TaskHandle  DO_taskHandle_ = 0;
@@ -54,19 +59,25 @@ private:
 	int		pixels_per_frame_;
 	int		samples_per_scan_;
 	int		samples_per_line_;
+	int		frames_to_average_;
 
 	// Private members (display control)
+	int		display_channel_ = 0;
 	int		sample_shift_ = 0;
 	float	min_ = 0.0f;
 	float	max_ = 1.0f;
 
+	// Private members (TIFF)
+	int					images_to_save_ = 0;
+	std::string			file_path_;
+
 	// Private Members (acquisition thread)
-	std::thread		scanner_thread_;
-	bool volatile	active_ = false;
-	bool volatile	scanning_ = false;
+	std::thread			scanner_thread_;
+	std::atomic<bool>	active_ = false;
+	std::atomic<bool>	scanning_ = false;
 
 	// Thread Function
-	void			Scanner_Thread_Function();
+	void				Scanner_Thread_Function();
 
 	// Private Methods
 	void				Reset_Mirrors();
@@ -75,6 +86,7 @@ private:
 	void				Save_Scan_Waveform(std::string path, double* waveform);
 	double*				Hermite_Blend_Interpolate(int steps, double y1, double y2, double slope1, double slope2);
 	std::vector<float> 	Load_32f_1ch_Tiff_Frame_From_File(char* path, int* width, int* height);
+	void				Save_Frame_to_32f_1ch_Tiff(TIFF *tiff_file, std::vector<float> data, int width, int height, int current_page, int total_pages);
 	void				Error_Handler(int error, const char* description);	// Scanner error handler function
 };
 
