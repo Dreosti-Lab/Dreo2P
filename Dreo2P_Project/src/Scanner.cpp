@@ -3,8 +3,20 @@
 #include "Scanner.h"
 #define _SCL_SECURE_NO_WARNINGS  
 
-// Constructor
-Scanner::Scanner(
+// Default constructor
+Scanner::Scanner()
+{
+
+};
+
+
+// Destructor
+Scanner::~Scanner()
+{
+}
+
+// Initialize scanner (and start seperate thread)
+void Scanner::Initialize(
 	double	amplitude,
 	double	input_rate,
 	double	output_rate,
@@ -49,12 +61,7 @@ Scanner::Scanner(
 	// Start the scan acquisition thread
 	active_ = true;
 	scanner_thread_ = std::thread(&Scanner::Scanner_Thread_Function, this);
-}
-
-
-// Destructor
-Scanner::~Scanner()
-{
+	return;
 }
 
 
@@ -66,20 +73,25 @@ void Scanner::Scanner_Thread_Function()
 
 	// Set display window size and position
 	// TO DO!!!
-	
+
 	// Load the default image, resize, and load into memory shared with the display thread
 	int default_image_width;
 	int default_image_height;
-	std::vector<float> default_image_data = Load_32f_1ch_Tiff_Frame_From_File("Dreo2P.tif", &default_image_width, &default_image_height);
+	char* default_image_path = "C:\\Repos\\Dreosti-Lab\\Dreo2P\\Dreo2P_Project\\Dreo2P_Console\\bin\\x64\\Debug\\Dreo2P.tif";
+	std::vector<float> default_image_data = Load_32f_1ch_Tiff_Frame_From_File(default_image_path, &default_image_width, &default_image_height);
 	std::vector<float> default_frame_data(pixels_per_frame_);
+	
 	// Fill default frame with data from default image
 	for (int i = 0; i < pixels_per_frame_; i++)
 	{
 		default_frame_data[i] = default_image_data[i % (default_image_width*default_image_height)];
 	}
+	
 	// Set display frame to default image
 	std::copy(default_frame_data.begin(), default_frame_data.end(), display.frame_data_A_.begin());
 	display.use_A_ = true;
+	display.min_ = 0.0f;
+	display.max_ = 1.0f;
 
 	// Allocate space for analog input data
 	int	buffer_size = (int)(input_rate_ * num_chans_); // Make buffer large enough to hold 1000 ms of 2 channel data
@@ -110,6 +122,8 @@ void Scanner::Scanner_Thread_Function()
 	int	current_column = 0;
 	float ch0_accum = 0.0f;
 	float ch1_accum = 0.0f;
+	float ch0_value = 0.0f;
+	float ch1_value = 0.0f;
 	int sample_ch0 = 0;
 	int sample_ch1 = 0;
 	bool first_scan = true;
@@ -173,19 +187,24 @@ void Scanner::Scanner_Thread_Function()
 				if (current_line == y_pixels_)
 				{
 					// Report progress
-					std::cout << "Frame: " << current_frame<< " of " << frames_to_average_ << std::endl;
+					std::cout << "Frame: " << current_frame + 1 << " of " << frames_to_average_ << std::endl;
 
 					// Reset scan_line pointer
 					current_line = 0;
 					current_column = 0;
 
-					// increment frame counter
+					// Increment frame counter
 					current_frame++;
 
-					// Check if all frames have been averaged. If so, stop this scan group!
+					// If saving images AND averaging frames, then stop after a full set of averages have been acquired...otherwise just reset count
 					if (current_frame == frames_to_average_)
 					{
-						scanning_ = false;
+						current_frame = 0;
+						if (images_to_save_ > 0)
+						{
+							scanning_ = false;
+							break;	// Leave this scan group
+						}
 					}
 				}
 
@@ -208,8 +227,29 @@ void Scanner::Scanner_Thread_Function()
 					// Save average pixel value in image frames
 					if (current_column < x_pixels_)
 					{
-						frame_ch0[(current_line * x_pixels_) + current_column] = ch0_accum / (float)bin_factor_;
-						frame_ch1[(current_line * x_pixels_) + current_column] = ch1_accum / (float)bin_factor_;
+						// Store running average pixel value for display/saving
+						if (current_frame > 0)
+						{
+							// Store current pixel value
+							ch0_value = frame_ch0[(current_line * x_pixels_) + current_column];
+							ch1_value = frame_ch1[(current_line * x_pixels_) + current_column];
+							
+							// Weight by number of averages thus far
+							ch0_value = ch0_value * (float) (current_frame);
+							ch1_value = ch1_value * (float) (current_frame);
+
+							// Add new measurement
+							ch0_value += (ch0_accum / (float)bin_factor_);
+							ch1_value += (ch1_accum / (float)bin_factor_);
+
+							// Divide by number of frames acquired
+							frame_ch0[(current_line * x_pixels_) + current_column] = ch0_value / (float)(current_frame + 1);
+							frame_ch1[(current_line * x_pixels_) + current_column] = ch1_value / (float)(current_frame + 1);
+						}
+						else {
+							frame_ch0[(current_line * x_pixels_) + current_column] = ch0_accum / (float)bin_factor_;
+							frame_ch1[(current_line * x_pixels_) + current_column] = ch1_accum / (float)bin_factor_;
+						}
 					}
 					// Increment column counter
 					current_column++;
@@ -219,40 +259,48 @@ void Scanner::Scanner_Thread_Function()
 				current_line++;
 			}
 
-			// Append residual samples from previous read to input buffer
-			num_residual_samples = num_new_samples - (num_full_scan_lines * samples_per_line_);
-			residual_sample_offset = (num_full_scan_lines * samples_per_line_ * num_chans_);
-			for (int r = 0; r < num_residual_samples*num_chans_; r+=num_chans_)
+			// Are we still scanning? If so, prepare for next input and update display
+			if (scanning_)
 			{
-				input_buffer[r] = input_buffer[residual_sample_offset + r];
-				input_buffer[r + 1] = input_buffer[residual_sample_offset + r + 1];
-			}
-
-			// Update display frames (use double buffering!)
-			if (display.use_A_)
-			{
-				if (display_channel_ == 1)
+				// Append residual samples from previous read to input buffer
+				num_residual_samples = num_new_samples - (num_full_scan_lines * samples_per_line_);
+				residual_sample_offset = (num_full_scan_lines * samples_per_line_ * num_chans_);
+				for (int r = 0; r < num_residual_samples*num_chans_; r += num_chans_)
 				{
-					std::copy(frame_ch1.begin(), frame_ch1.end(), display.frame_data_B_.begin());
+					input_buffer[r] = input_buffer[residual_sample_offset + r];
+					input_buffer[r + 1] = input_buffer[residual_sample_offset + r + 1];
+				}
+
+				// Update display frames (use double buffering!)
+				if (display.use_A_)
+				{
+					if (display_channel_ == 1)
+					{
+						std::copy(frame_ch1.begin(), frame_ch1.end(), display.frame_data_B_.begin());
+					}
+					else {
+						std::copy(frame_ch0.begin(), frame_ch0.end(), display.frame_data_B_.begin());
+					}
+					display.use_A_ = false;
 				}
 				else {
-					std::copy(frame_ch0.begin(), frame_ch0.end(), display.frame_data_B_.begin());
+					if (display_channel_ == 1)
+					{
+						std::copy(frame_ch1.begin(), frame_ch1.end(), display.frame_data_A_.begin());
+					}
+					else {
+						std::copy(frame_ch0.begin(), frame_ch0.end(), display.frame_data_A_.begin());
+					}
+					display.use_A_ = true;
 				}
-				display.use_A_ = false;
-			}
-			else {
-				if (display_channel_ == 1)
-				{
-					std::copy(frame_ch1.begin(), frame_ch1.end(), display.frame_data_A_.begin());
-				}
-				else {
-					std::copy(frame_ch0.begin(), frame_ch0.end(), display.frame_data_A_.begin());
-				}
-				display.use_A_ = true;
-			}
 
-			// Sleep the thread for a bit (no need to update tooooooo quickly)
-			Sleep(16);
+				// Set display range
+				display.min_ = min_;
+				display.max_ = max_;
+
+				// Sleep the thread for a bit (no need to update tooooooo quickly)
+				Sleep(16);
+			}
 		}
 
 		// Close shutter
@@ -272,8 +320,10 @@ void Scanner::Scanner_Thread_Function()
 
 			// Save frame 1
 			Scanner::Save_Frame_to_32f_1ch_Tiff(frame_1_tiff, frame_ch1, x_pixels_, y_pixels_, current_frame, images_to_save_);
+			
+			// Report saving
+			std::cout << "Saving averaged frame.\n\n";
 		}
-		std::cout << "Saving averaged frame.\n";
 
 		// Go back and wait for the next "start" signal
 	}
@@ -282,8 +332,11 @@ void Scanner::Scanner_Thread_Function()
 	free(input_buffer);
 
 	// Close TIFF files
-	TIFFClose(frame_0_tiff);
-	TIFFClose(frame_1_tiff);
+	if (images_to_save_ > 0)
+	{
+		TIFFClose(frame_0_tiff);
+		TIFFClose(frame_1_tiff);
+	}
 
 	// Close GLFW window and thread
 	display.Close();
@@ -340,8 +393,10 @@ void Scanner::Close()
 
 
 // Update display parameters
-void Scanner::Configure_Display(int channel)
+void Scanner::Configure_Display(int channel, float min, float max)
 {
+	min_ = min;
+	max_ = max;
 	display_channel_ = channel;
 }
 
@@ -567,7 +622,7 @@ void Scanner::Save_Frame_to_32f_1ch_Tiff(TIFF *tiff_file, std::vector<float> dat
 	TIFFSetField(tiff_file, TIFFTAG_FILLORDER, FILLORDER_MSB2LSB);
 	TIFFSetField(tiff_file, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
 	TIFFSetField(tiff_file, TIFFTAG_SUBFILETYPE, FILETYPE_PAGE);
-	TIFFSetField(tiff_file, TIFFTAG_PAGENUMBER, current_page, 0);
+	TIFFSetField(tiff_file, TIFFTAG_PAGENUMBER, current_page, total_pages);
 
 	// Write frame data
 	TIFFWriteEncodedStrip(tiff_file, 0, data.data(), width*height*sizeof(float));

@@ -19,23 +19,24 @@
 class Scanner
 {
 public:
-	// Constructor
-	Scanner(double	amplitude,
-			double	input_rate,
-			double	output_rate,
-			int		x_pixels,
-			int		y_pixels,
-			int		frames_to_average_);
+	// Default Constructor
+	Scanner();
 
 	// Destructor
 	~Scanner();
 
 	// Public Methods
+	void Initialize(double	amplitude,
+					double	input_rate,
+					double	output_rate,
+					int		x_pixels,
+					int		y_pixels,
+					int		frames_to_average_);
 	void Start();
 	void Stop();
 	void Close();
 	bool Is_Scanning();
-	void Configure_Display(int channel);
+	void Configure_Display(int channel, float min, float max);
 	void Configure_Saving(char *path, int images_to_save);
 
 private:

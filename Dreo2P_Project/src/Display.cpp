@@ -168,11 +168,15 @@ void Display::Initialize_Render()
 	static const char* fragment_shader_text =
 		"#version 400\n"
 		"uniform sampler2D tex;\n"
+		"uniform float min;\n"
 		"uniform float max;\n"
 		"in vec2 tex_coord;\n"
 		"out vec4 frag_color;\n"
+		"float val;\n"
 		"void main() {\n"
-		"	frag_color.rgba = vec4(texture(tex, tex_coord).r);\n"
+		"	val = texture(tex, tex_coord).r;\n"
+		" 	val = (val - min)/(max-min);\n"
+		"	frag_color.rgba = vec4(val);\n"
 		"}\n";
 
 	// Load and compile vertex shader
@@ -213,6 +217,7 @@ void Display::Initialize_Render()
 	glLinkProgram(program);
 
 	// Gather addresses of uniforms (matrices, vertex positions, and colors)
+	min_location = glGetUniformLocation(program, "min");
 	max_location = glGetUniformLocation(program, "max");
 
 	return;
@@ -267,7 +272,8 @@ void Display::Render()
 	glUniform1i(glGetUniformLocation(program, "tex"), 0);
 
 	// Update uniform
-	glUniform1f(max_location, intensity_);
+	glUniform1f(min_location, min_);
+	glUniform1f(max_location, max_);
 
 	// Specify which vertex attribute array object to use
 	glBindVertexArray(vertex_array_object);

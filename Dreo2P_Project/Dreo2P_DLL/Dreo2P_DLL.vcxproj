@@ -104,12 +104,12 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>_DEBUG;Dreo2PDLL_EXPORTS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(SolutionDir)\deps\glfw\deps;$(SolutionDir)\deps\glfw\include;$(SolutionDir)\deps;$(SolutionDir)\deps\nidaq\include;$(SolutionDir)\src</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)\deps\glfw\deps;$(SolutionDir)\deps\glfw\include;$(SolutionDir)\deps\libtiff\include;$(SolutionDir)\deps\nidaq\include;$(SolutionDir)\deps;$(SolutionDir)\src</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>$(SolutionDir)\deps\glfw\lib\glfw3.lib;opengl32.lib;$(SolutionDir)\deps\nidaq\lib\NIDAQmx.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(SolutionDir)\deps\glfw\lib\glfw3.lib;opengl32.lib;$(SolutionDir)\deps\nidaq\lib\NIDAQmx.lib;$(SolutionDir)deps\libtiff\lib\libtiff.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -149,12 +149,14 @@
   <ItemGroup>
     <ClCompile Include="..\deps\glfw\deps\glad.c" />
     <ClCompile Include="..\src\Display.cpp" />
+    <ClCompile Include="..\src\Scanner.cpp" />
     <ClCompile Include="src\dllmain.cpp" />
     <ClCompile Include="src\Dreo2P_DLL.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\deps\glfw\deps\glad\glad.h" />
     <ClInclude Include="..\src\Display.h" />
+    <ClInclude Include="..\src\Scanner.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

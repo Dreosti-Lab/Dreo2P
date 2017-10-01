@@ -15,6 +15,7 @@
 // Include STD headers
 #include <iostream>
 #include <thread>
+#include <atomic>
 #include <vector>
 
 class Display
@@ -33,7 +34,8 @@ public:
 	bool				use_A_ = false;
 	int					frame_width_;
 	int					frame_height_;
-	float				intensity_ = 0.0f;
+	float				min_ = 0.0f;
+	float				max_ = 0.0f;
 
 	// Public Methods
 	void Close();
@@ -43,13 +45,13 @@ private:
 	GLuint			vertex_shader, fragment_shader, program;
 	GLuint			vertex_array_object;
 	GLuint			frame_texture_;
-	GLint			max_location, vpos_location;
+	GLint			min_location, max_location, vpos_location;
 	int				window_width_;
 	int				window_height_;
 
 	// Private Members (display thread)
-	std::thread		display_thread_;
-	bool volatile	active_ = false;
+	std::thread			display_thread_;
+	std::atomic<bool>	active_ = false;
 
 	// Thread Function
 	void		Display_Thread_Function();

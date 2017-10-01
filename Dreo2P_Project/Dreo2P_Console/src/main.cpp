@@ -11,17 +11,17 @@ int main()
 	std::cout << "-----------------------\n";
 
 	// Construct scanner
-	Scanner scanner(1.0, 5000000, 250000, 512, 512, 2);
-
-	// Set save file name
-	scanner.Configure_Saving("Test", 4);
+	Scanner scanner;
+	int num_save = 2;
+	scanner.Configure_Saving("C:\\Users\\Dreosti Lab\\Desktop\\Test", num_save);
+	scanner.Initialize(1.0, 5000000.0, 250000.0, 512, 512, 2);
 
 	// Acquire a number of (averaged) frames
-	for (size_t i = 0; i < 4; i++)
+	for (size_t i = 0; i < num_save; i++)
 	{
 		// Start scanning
 		scanner.Start();
-		scanner.Configure_Display(0);
+		scanner.Configure_Display(0, -0.004f, 0.0f);
 
 		// Wait until done
 		while (scanner.Is_Scanning())
