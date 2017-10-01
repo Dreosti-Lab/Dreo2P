@@ -12,17 +12,18 @@ Scanner::Scanner(
 	int		y_pixels)
 {
 	// Set scan parameters
-	amplitude_ =	amplitude;
-	input_rate_ =	input_rate;
-	output_rate_ =	output_rate;
-	x_pixels_ =		x_pixels;
-	y_pixels_ =		y_pixels;
+	amplitude_		= amplitude;
+	input_rate_		= input_rate;
+	output_rate_	= output_rate;
+	x_pixels_		= x_pixels;
+	y_pixels_		= y_pixels;
+	num_chans_		= 2;
 
 	// Initialize error
 	int status = 0;
 
 	// Generate scan pattern
-	scan_waveform_ = Generate_Scan_Waveform();
+	Generate_Scan_Waveform();
 
 	// Create and start digital output task (shutter controller)
 	DAQmxCreateTask("", &DO_taskHandle_);
@@ -33,13 +34,13 @@ Scanner::Scanner(
 	// Create analog input task
 	DAQmxCreateTask("", &AI_taskHandle_);
 	DAQmxCreateAIVoltageChan(AI_taskHandle_, "Dev1/ai0:1", "", DAQmx_Val_Cfg_Default, -10.0, 10.0, DAQmx_Val_Volts, NULL);
-	status = DAQmxCfgSampClkTiming(AI_taskHandle_, "", input_rate_, DAQmx_Val_Rising, DAQmx_Val_ContSamps, pixels_per_frame_ * bin_factor_);
+	status = DAQmxCfgSampClkTiming(AI_taskHandle_, "", input_rate_, DAQmx_Val_Rising, DAQmx_Val_ContSamps, samples_per_scan_);
 	if (status) { Error_Handler(status, "AI Task setup"); }
 
 	// Create analog output task
 	DAQmxCreateTask("", &AO_taskHandle_);
 	DAQmxCreateAOVoltageChan(AO_taskHandle_, "Dev1/ao0:1", "", -10.0, 10.0, DAQmx_Val_Volts, NULL);
-	DAQmxCfgSampClkTiming(AO_taskHandle_, "", output_rate_, DAQmx_Val_Rising, DAQmx_Val_ContSamps, pixels_per_frame_);
+	DAQmxCfgSampClkTiming(AO_taskHandle_, "", output_rate_, DAQmx_Val_Rising, DAQmx_Val_ContSamps, pixels_per_scan_);
 	status = DAQmxCfgDigEdgeStartTrig(AO_taskHandle_, "/Dev1/ai/StartTrigger", DAQmx_Val_Rising);
 	if (status) { Error_Handler(status, "AO Task setup"); }
 
@@ -64,7 +65,6 @@ void Scanner::Scanner_Thread_Function()
 	// Load the default image into memory shared with the display thread
 	int image_width = 1024;
 	int image_height = 1024;
-	int num_chans = 2;
 	display.frame_data_A_ = Load_32f_1ch_Tiff_Frame_From_File("Dreo2P.tif", &image_width, &image_height);
 	display.frame_data_B_ = Load_32f_1ch_Tiff_Frame_From_File("Dreo2P.tif", &image_width, &image_height);
 	//display.frame_data_A_.resize(x_pixels_*y_pixels_);
@@ -73,21 +73,30 @@ void Scanner::Scanner_Thread_Function()
 	display.frame_height_ = image_height;
 	display.use_A_ = true;
 
-	// Allocate space for input data
-	double*				input_buffer;
-	std::vector<float>	frame_ch0(x_pixels_*y_pixels_);
-	std::vector<float>	frame_ch1(x_pixels_*y_pixels_);
-	std::vector<float>	frame_display(x_pixels_*y_pixels_*4);
+	// Allocate space for analog input data
+	int	buffer_size = (int)(input_rate_ * num_chans_); // Make buffer large enough to hold 1000 ms of 2 channel data
+	double*	input_buffer = (double*) malloc(sizeof(double) * buffer_size);
+	std::vector<float>	frame_ch0(pixels_per_frame_);
+	std::vector<float>	frame_ch1(pixels_per_frame_);
+	std::vector<float>	frame_display(pixels_per_frame_ * 4);
 
-	int	residual_samples = 0;
-	int	buffer_size	= (int)round((sizeof(double) * input_rate_) / 2);
-	input_buffer = (double *)malloc(buffer_size * 2); // Make buffer large enough to hold 100 ms of 2 channel data
-	
-	// Initialize status
+	// Declare helper local variables
+	int	num_residual_samples = 0;
+	int residual_sample_offset = 0;
+	int32 num_read_samples = 0;
+	int	num_new_samples = 0;
+	int num_full_scan_lines = 0;
+	int current_frame = 0;
+	int current_line = 0;
+	int	current_column = 0;
+	float ch0_accum = 0.0f;
+	float ch1_accum = 0.0f;
+	int sample_ch0 = 0;
+	int sample_ch1 = 0;
+	bool first_scan = true;
+
+	// Initialize error status
 	int status = 0;
-
-	// Initial scan line counter
-	int current_scan_line = 0;
 
 	// Main thread loop...
 	// -------------------
@@ -101,14 +110,17 @@ void Scanner::Scanner_Thread_Function()
 		while (!scanning_ && active_)
 		{
 			Sleep(32);
+			first_scan = true;
 		}
 
 		// Scan acquisition loop
-		int frame_number = 0;
+		current_frame = 0;
+		current_line = 0;
+		current_column = 0;
 		while (scanning_)
 		{
-			// If first scan...
-			if (frame_number == 0)
+			// If first scan...open shutter and start acquisition
+			if (first_scan)
 			{
 				// Open shutter
 				Scanner::Set_Shutter_State(true);
@@ -117,70 +129,82 @@ void Scanner::Scanner_Thread_Function()
 				status = DAQmxStartTask(AI_taskHandle_);
 				if (status) { Error_Handler(status, "AI Task start"); }
 				std::cout << "Starting scanner.\n";
+
+				// Reset first scan indicator
+				first_scan = false;
 			}
 
-			// Read available input samples (all channels)
-			int32 num_read;
-			status = DAQmxReadAnalogF64(AI_taskHandle_, -1, 1.0, DAQmx_Val_GroupByScanNumber, 
-										&input_buffer[residual_samples*num_chans], buffer_size * 2, &num_read, NULL);
+			// Read available input samples (on all channels)
+			status = DAQmxReadAnalogF64(AI_taskHandle_, -1, 1.0, DAQmx_Val_GroupByScanNumber, &input_buffer[num_residual_samples*num_chans_], buffer_size, &num_read_samples, NULL);
 			if (status) { Error_Handler(status, "AI Task read"); }
 			
 			// How many new samples (including left-over from previous scan)?
-			int new_samples = num_read + residual_samples;
+			num_new_samples = num_read_samples + num_residual_samples;
 
 			// Measure number of full scan lines acquired and store residual (partial line) samples
-			int full_scan_lines = (int)floor(new_samples / samples_per_line_);
+			num_full_scan_lines = (int)floor(num_new_samples / samples_per_line_);
 
-			// Extract samples for each channel from interleaved data array, bin and sort into frames
-			for (int i = 0; i < full_scan_lines; i++)
+			// Extract samples for each channel from interleaved data array, bin, and sort into seperate frames (ignoring flyback)
+			for (int i = 0; i < num_full_scan_lines; i++)
 			{
-				// Check if we reach a new frame!!
-				if (current_scan_line == y_pixels_)
+				// Check if we reach the end of a comple frame.
+				if (current_line == y_pixels_)
 				{
-					// Save data to TIFF file!
+					// Report progress
+					std::cout << "Frame: " << current_frame;
+					if ((current_line - 1) >= 0)
+					{
+						std::cout << frame_ch0[(current_line - 1)*x_pixels_] << " " << (current_line - 1) << "\n";
+						display.intensity_ = (float)(current_line - 1) / 10.0f;
+					}
+
+					// Save data to TIFF file!!! update display stuff?
 
 					// Reset scan_line pointer
-					current_scan_line = 0;
-				}
+					current_line = 0;
 
-				int current_col = 0;
-				for (int j = 0; j < (samples_per_line_*num_chans); j += (num_chans*bin_factor_))
+					// increment frame counter
+					current_frame++;
+				}
+				// Loop though columns
+				current_column = 0;
+				for (int j = 0; j < (samples_per_line_*num_chans_); j += (num_chans_*bin_factor_))
 				{
-					float ch0_accum = 0.0f;
-					float ch1_accum = 0.0f;
-					for (int b = 0; b < bin_factor_*num_chans; b+=num_chans)
+					// Bin subsequent samples into a pixel value
+					ch0_accum = 0.0f;
+					ch1_accum = 0.0f;
+					for (int b = 0; b < bin_factor_*num_chans_; b+=num_chans_)
 					{
-						int sample_ch0 = ((i*samples_per_line_*num_chans) + j) + b;
-						int sample_ch1 = ((i*samples_per_line_*num_chans) + j) + b + 1;
+						sample_ch0 = ((i*samples_per_line_*num_chans_) + j) + b;
+						sample_ch1 = ((i*samples_per_line_*num_chans_) + j) + b + 1;
 
 						// read input and split channels
 						ch0_accum += (float)input_buffer[sample_ch0];
 						ch1_accum += (float)input_buffer[sample_ch1];
 					}
 					// Save average pixel value in image frames
-					if (current_col < x_pixels_)
+					if (current_column < x_pixels_)
 					{
-						frame_ch0[(current_scan_line * x_pixels_) + current_col] = ch0_accum / (float)bin_factor_;
-						frame_ch1[(current_scan_line * x_pixels_) + current_col] = ch1_accum / (float)bin_factor_;
+						frame_ch0[(current_line * x_pixels_) + current_column] = ch0_accum / (float)bin_factor_;
+						frame_ch1[(current_line * x_pixels_) + current_column] = ch1_accum / (float)bin_factor_;
 					}
 					// Increment column counter
-					current_col++;
+					current_column++;
 				}
 				// Increment scan line indicator
-				current_scan_line++;
+				current_line++;
 			}
 
 			// Append residual samples from previous read to input buffer
-			residual_samples = new_samples - (full_scan_lines * samples_per_line_);
-			int sample_offset = (full_scan_lines * samples_per_line_ * num_chans);
-
-			for (int r = 0; r < residual_samples*num_chans; r+=num_chans)
+			num_residual_samples = num_new_samples - (num_full_scan_lines * samples_per_line_);
+			residual_sample_offset = (num_full_scan_lines * samples_per_line_ * num_chans_);
+			for (int r = 0; r < num_residual_samples*num_chans_; r+=num_chans_)
 			{
-				input_buffer[r] = input_buffer[sample_offset + r];
-				input_buffer[r + 1] = input_buffer[sample_offset + r + 1];
+				input_buffer[r] = input_buffer[residual_sample_offset + r];
+				input_buffer[r + 1] = input_buffer[residual_sample_offset + r + 1];
 			}
 
-			// Update display frame
+			// Update display frames (use double buffering!)
 			int frame_size = display.frame_width_ * display.frame_height_;
 			if (display.use_A_)
 			{
@@ -194,23 +218,7 @@ void Scanner::Scanner_Thread_Function()
 			display.frame_width_ = x_pixels_;
 			display.frame_width_ = y_pixels_;
 
-			// Increment frame counter
-			frame_number++;
-			std::cout << "Frame: " << frame_number;
-			if (display.use_A_) 
-			{
-				std::cout << " A: ";
-			}
-			else {
-				std::cout << " B: ";
-			}
-			if ((current_scan_line-1) >= 0)
-			{
-				std::cout << frame_ch0[(current_scan_line - 1)*x_pixels_] << " " << (current_scan_line - 1) << "\n";
-				display.intensity_ = (float)(current_scan_line - 1) / 10.0f;
-			}
-
-			// Sleep the thread for a bit (no need to update tooo quickly)
+			// Sleep the thread for a bit (no need to update tooooooo quickly)
 			Sleep(16);
 		}
 
@@ -224,10 +232,10 @@ void Scanner::Scanner_Thread_Function()
 		std::cout << "Stopping scanner.\n";
 	}
 
-	// Deallocate (thread) resources
+	// Free input buffer
 	free(input_buffer);
 
-	// Close GLFW window
+	// Close GLFW window and thread
 	display.Close();
 
 	return;
@@ -254,7 +262,7 @@ void Scanner::Reset_Mirrors()
 	// Load full scan parameters to AO hardware and restart device
 	DAQmxResetWriteOffset(AO_taskHandle_);
 	if (status) { Error_Handler(status, "AO Write offset"); }
-	status = DAQmxWriteAnalogF64(AO_taskHandle_, pixels_per_frame_, FALSE, 10.0, DAQmx_Val_GroupByScanNumber, scan_waveform_, NULL, NULL);
+	status = DAQmxWriteAnalogF64(AO_taskHandle_, pixels_per_scan_, FALSE, 10.0, DAQmx_Val_GroupByScanNumber, scan_waveform_, NULL, NULL);
 	status = DAQmxStartTask(AO_taskHandle_);
 	if (status) { Error_Handler(status, "AO Restart"); }
 
@@ -310,27 +318,33 @@ void Scanner::Close()
 
 
 // Generate the X and Y voltages for a raster scan pattern (unidirectional)
-double* Scanner::Generate_Scan_Waveform()
+void Scanner::Generate_Scan_Waveform()
 {
+	// Check that input and out rates are multiples of one another
+	if ((input_rate_ > output_rate_) && ((int)input_rate_ % (int)output_rate_ != 0))
+	{
+		Error_Handler(-1, "Input and output rate ratio must be positive integer.");
+	}
+	bin_factor_ = (int)input_rate_ / (int)output_rate_;
+
 	// Number of backwards (return) pixels
 	flyback_pixels_ = (int)floor(output_rate_ / 1000.0); // minimum 1 millisecond return
-	double ratio = x_pixels_ / flyback_pixels_;
 
-	// Compute scan velocities (forward and backward) in volts/update (i.e. step size)
-	double forward_velocity = (2.0 * amplitude_) / x_pixels_;	// ...in volts/update
+	// Compute forward scan velocity in volts/update (i.e. step size)
+	double forward_velocity = (2.0 * amplitude_) / x_pixels_;
 
-	// Perform Hermite blend interpolation from end to start
+	// Perform Hermite blend interpolation from end of line to start of next line
 	double *flyback = Scanner::Hermite_Blend_Interpolate(flyback_pixels_, amplitude_, -amplitude_, forward_velocity, forward_velocity);
 
 	// Compute the size of each scan segment: forward and flyback (turn, backward, turn)
-	int pixels_per_line = x_pixels_ + flyback_pixels_;
-	pixels_per_frame_ = pixels_per_line * y_pixels_;
-	bin_factor_ = (int)round(input_rate_ / output_rate_);		// This must be an integer (multiple)
-	samples_per_line_ = (x_pixels_ + flyback_pixels_) * bin_factor_;
+	pixels_per_line_ = x_pixels_ + flyback_pixels_;
+	pixels_per_scan_ = pixels_per_line_ * y_pixels_;
+	pixels_per_frame_ = x_pixels_ * y_pixels_;
+	samples_per_line_ = pixels_per_line_ * bin_factor_;
+	samples_per_scan_ = pixels_per_scan_ * bin_factor_;
 
 	// Create space for scan waveform (both X and Y values)
-	double* scan_waveform;
-	scan_waveform = (double *)malloc(sizeof(double) * pixels_per_frame_ * 2);
+	scan_waveform_ = (double *)malloc(sizeof(double) * pixels_per_scan_ * 2);
 
 	// Fill array with scan positions (voltages)
 	int offset = 0;
@@ -340,10 +354,10 @@ double* Scanner::Generate_Scan_Waveform()
 		for (size_t i = 0; i < x_pixels_; i++)
 		{
 			// X value
-			scan_waveform[offset] = (-1.0 * amplitude_) + (forward_velocity * i);
+			scan_waveform_[offset] = (-1.0 * amplitude_) + (forward_velocity * i);
 			offset++;
 			// Y value
-			scan_waveform[offset] = (-1.0 * amplitude_) + (forward_velocity * j);	// This may not make sense! (assumes X = Y)
+			scan_waveform_[offset] = (-1.0 * amplitude_) + (forward_velocity * j);	// This may not make sense! (assumes X = Y)
 			offset++;
 		}
 		// Then insert flyback from +amp to +amp
@@ -352,18 +366,18 @@ double* Scanner::Generate_Scan_Waveform()
 		for (size_t i = 0; i < flyback_pixels_; i++)
 		{
 			// X value
-			scan_waveform[offset] = flyback[i];
+			scan_waveform_[offset] = flyback[i];
 			offset++;
 			// Y value
-			scan_waveform[offset] = (-1.0 * amplitude_) + (forward_velocity * j);	// This may not make sense! (assumes X = Y)
+			scan_waveform_[offset] = (-1.0 * amplitude_) + (forward_velocity * j);	// This may not make sense! (assumes X = Y)
 			offset++;
 		}
 	}
-	return scan_waveform;
+	return;
 }
 
 
-// Save scan waveform to local file (for debugging) as CSV (slow!)
+// Save scan waveform to local file (for debugging) as CSV (this is very slow!)
 void Scanner::Save_Scan_Waveform(std::string path, double* waveform)
 {
 	// Open file
@@ -371,7 +385,7 @@ void Scanner::Save_Scan_Waveform(std::string path, double* waveform)
 	out_file.open(path, std::ios::out);
 	
 	// Write waveform data
-	for (size_t i = 0; i < pixels_per_frame_; i++)
+	for (size_t i = 0; i < pixels_per_scan_; i++)
 	{
 		out_file << waveform[i] << ',';
 	}
@@ -469,7 +483,7 @@ std::vector<float> Scanner::Load_32f_1ch_Tiff_Frame_From_File(char* path, int* w
 void Scanner::Error_Handler(int error, const char* description)
 {
 		// Report error
-		fprintf(stderr, "Error (%i): %s\n", error, description);
+		fprintf(stderr, "Scnner Error (%i): %s\n", error, description);
 
 		// Close gracefully
 		Scanner::Close();

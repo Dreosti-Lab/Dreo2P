@@ -89,7 +89,7 @@ void Display::Initialize_Window(int width, int height)
 	// Report graphics hardware and OpenGL version info
 	const GLubyte* renderer = glGetString(GL_RENDERER); // get renderer string
 	const GLubyte* version = glGetString(GL_VERSION); // version as a string
-	printf("OpenGL:");
+	printf("OpenGL:\n");
 	printf("-------\n");
 	printf("Renderer: %s\n", renderer);
 	printf("OpenGL version supported: %s\n", version);
@@ -180,7 +180,7 @@ void Display::Initialize_Render()
 		"in vec2 tex_coord;\n"
 		"out vec4 frag_color;\n"
 		"void main() {\n"
-		"	frag_color = texture(tex, tex_coord)/max;\n"
+		"	frag_color = texture(tex, tex_coord);\n"
 		"}\n";
 
 	// Load and compile vertex shader

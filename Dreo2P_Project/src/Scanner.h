@@ -42,19 +42,23 @@ private:
 	// Private Members (scan parameters)
 	double*	scan_waveform_;
 	double	amplitude_;
-	double	input_rate_;
-	double	output_rate_;
+	double	input_rate_;		// Number of samples per second
+	double	output_rate_;		// Number of pixels per second
+	int		bin_factor_;		// Ratio of samples per pixel (must be integer)
+	int		num_chans_;
 	int		x_pixels_;
 	int		y_pixels_;
 	int		flyback_pixels_;
+	int		pixels_per_line_;
+	int		pixels_per_scan_;
 	int		pixels_per_frame_;
+	int		samples_per_scan_;
 	int		samples_per_line_;
-	int		bin_factor_;
 
 	// Private members (display control)
-	int		shift_ = 0;
-	float	min_ = 0.25f;
-	float	max_ = 0.25f;
+	int		sample_shift_ = 0;
+	float	min_ = 0.0f;
+	float	max_ = 1.0f;
 
 	// Private Members (acquisition thread)
 	std::thread		scanner_thread_;
@@ -62,11 +66,11 @@ private:
 	bool volatile	scanning_ = false;
 
 	// Thread Function
-	void		Scanner_Thread_Function();
+	void			Scanner_Thread_Function();
 
 	// Private Methods
 	void				Reset_Mirrors();
-	double*				Generate_Scan_Waveform();
+	void				Generate_Scan_Waveform();
 	void				Set_Shutter_State(bool state);
 	void				Save_Scan_Waveform(std::string path, double* waveform);
 	double*				Hermite_Blend_Interpolate(int steps, double y1, double y2, double slope1, double slope2);
