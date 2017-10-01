@@ -26,7 +26,8 @@ extern "C" __declspec(dllexport) void Initialize(double amplitude,
 												int x_pixels, 
 												int y_pixels, 
 												int averages, 
-												int num_to_save, 
+												int sample_shift,
+												int num_to_save,
 												char* path);
 
 extern "C" __declspec(dllexport) void Start();
@@ -49,6 +50,7 @@ __declspec(dllexport) void Initialize(
 		int x_pixels, 
 		int y_pixels, 
 		int averages,
+		int sample_shift,
 		int num_to_save,
 		char* path)
 {
@@ -56,7 +58,7 @@ __declspec(dllexport) void Initialize(
 	scanner.Configure_Saving(path, num_to_save);
 
 	// Initialize global scnner object
-	scanner.Initialize(amplitude, input_rate, output_rate, x_pixels, y_pixels, averages);
+	scanner.Initialize(amplitude, input_rate, output_rate, x_pixels, y_pixels, averages, sample_shift);
 	return;
 }
 

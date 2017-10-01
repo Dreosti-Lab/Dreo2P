@@ -22,7 +22,8 @@ void Scanner::Initialize(
 	double	output_rate,
 	int		x_pixels,
 	int		y_pixels,
-	int		frames_to_average)
+	int		frames_to_average,
+	int		sample_shift)
 {
 	// Set scan parameters
 	amplitude_			= amplitude;
@@ -31,6 +32,7 @@ void Scanner::Initialize(
 	x_pixels_			= x_pixels;
 	y_pixels_			= y_pixels;
 	frames_to_average_	= frames_to_average;
+	sample_shift_		= sample_shift;
 	num_chans_			= 2;
 
 	// Initialize error
@@ -127,6 +129,7 @@ void Scanner::Scanner_Thread_Function()
 	int sample_ch0 = 0;
 	int sample_ch1 = 0;
 	bool first_scan = true;
+	int	initial_offset = 0;
 
 	// Initialize error status
 	int status = 0;
@@ -165,6 +168,9 @@ void Scanner::Scanner_Thread_Function()
 				status = DAQmxStartTask(AI_taskHandle_);
 				if (status) { Error_Handler(status, "AI Task start"); }
 				std::cout << "Starting scanner.\n";
+
+				// Read available input samples (on all channels) and discard!
+				status = DAQmxReadAnalogF64(AI_taskHandle_, sample_shift_, 1.0, DAQmx_Val_GroupByScanNumber, &input_buffer[0], buffer_size, &num_read_samples, NULL);
 
 				// Reset first scan indicator
 				first_scan = false;

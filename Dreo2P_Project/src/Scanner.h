@@ -31,7 +31,8 @@ public:
 					double	output_rate,
 					int		x_pixels,
 					int		y_pixels,
-					int		frames_to_average_);
+					int		frames_to_average_,
+					int		sample_shift);
 	void Start();
 	void Stop();
 	void Close();
