@@ -40,6 +40,7 @@ void Scanner::Initialize(
 
 	// Generate scan pattern
 	Generate_Scan_Waveform();
+	Save_Scan_Waveform("waveform.csv", scan_waveform_);
 
 	// Create and start digital output task (shutter controller)
 	DAQmxCreateTask("", &DO_taskHandle_);
@@ -456,18 +457,23 @@ void Scanner::Generate_Scan_Waveform()
 	// Check that input and out rates are multiples of one another
 	if ((input_rate_ > output_rate_) && ((int)input_rate_ % (int)output_rate_ != 0))
 	{
-		Error_Handler(-1, "Input and output rate ratio must be positive integer.");
+		Error_Handler(-1, "Input and output rate ratio must be a positive integer.");
 	}
 	bin_factor_ = (int)input_rate_ / (int)output_rate_;
 
 	// Number of backwards (return) pixels
-	flyback_pixels_ = (int)floor(output_rate_ / 1000.0); // minimum 1 millisecond return
+	int backward_pixels = (int)floor(output_rate_ / 1000.0); // minimum 1 millisecond return
 
 	// Compute forward scan velocity in volts/update (i.e. step size)
 	double forward_velocity = (2.0 * amplitude_) / x_pixels_;
 
+	// Compute overshoot pixels
+	int overshoot_pixels = (int)round(forward_velocity * 7500);	// Somewhat arbitrary
+	double overshoot_amplitude = amplitude_ + (forward_velocity * overshoot_pixels);
+
 	// Perform Hermite blend interpolation from end of line to start of next line
-	double *flyback = Scanner::Hermite_Blend_Interpolate(flyback_pixels_, amplitude_, -amplitude_, forward_velocity, forward_velocity);
+	flyback_pixels_ = overshoot_pixels + backward_pixels + overshoot_pixels;
+	double *flyback = Scanner::Hermite_Blend_Interpolate(backward_pixels, overshoot_amplitude, -overshoot_amplitude, forward_velocity, forward_velocity);
 
 	// Compute the size of each scan segment: forward and flyback (turn, backward, turn)
 	pixels_per_line_ = x_pixels_ + flyback_pixels_;
@@ -477,7 +483,7 @@ void Scanner::Generate_Scan_Waveform()
 	samples_per_scan_ = pixels_per_scan_ * bin_factor_;
 
 	// Create space for scan waveform (both X and Y values)
-	scan_waveform_ = (double *)malloc(sizeof(double) * pixels_per_scan_ * 2);
+	scan_waveform_ = (double *)malloc(sizeof(double) * pixels_per_scan_ * 2.0);
 
 	// Fill array with scan positions (voltages)
 	int offset = 0;
@@ -493,13 +499,33 @@ void Scanner::Generate_Scan_Waveform()
 			scan_waveform_[offset] = (-1.0 * amplitude_) + (forward_velocity * j);	// This may not make sense! (assumes X = Y)
 			offset++;
 		}
-		// Then insert flyback from +amp to +amp
+		// Then go from +amp to +overshoot_amp in +velocity steps
+		for (size_t i = 0; i < overshoot_pixels; i++)
+		{
+			// X value
+			scan_waveform_[offset] = amplitude_ + (forward_velocity * i);
+			offset++;
+			// Y value
+			scan_waveform_[offset] = (-1.0 * amplitude_) + (forward_velocity * j);	// This may not make sense! (assumes X = Y)
+			offset++;
+		}
+		// Then insert flyback from +overshoot_amp to -overshoot_amp
 		double current_velocity = forward_velocity;
-		double current_position = amplitude_;
-		for (size_t i = 0; i < flyback_pixels_; i++)
+		double current_position = overshoot_amplitude;
+		for (size_t i = 0; i < backward_pixels; i++)
 		{
 			// X value
 			scan_waveform_[offset] = flyback[i];
+			offset++;
+			// Y value
+			scan_waveform_[offset] = (-1.0 * amplitude_) + (forward_velocity * j);	// This may not make sense! (assumes X = Y)
+			offset++;
+		}
+		// Then go from -overshoot_amp to -amp in +velocity steps
+		for (size_t i = 0; i < overshoot_pixels; i++)
+		{
+			// X value
+			scan_waveform_[offset] = -overshoot_amplitude + (forward_velocity * i);
 			offset++;
 			// Y value
 			scan_waveform_[offset] = (-1.0 * amplitude_) + (forward_velocity * j);	// This may not make sense! (assumes X = Y)
@@ -518,7 +544,7 @@ void Scanner::Save_Scan_Waveform(std::string path, double* waveform)
 	out_file.open(path, std::ios::out);
 	
 	// Write waveform data
-	for (size_t i = 0; i < pixels_per_scan_; i++)
+	for (size_t i = 0; i < pixels_per_line_*5; i++)
 	{
 		out_file << waveform[i] << ',';
 	}

@@ -20,15 +20,16 @@ Scanner scanner;
 // ---------------------
 
 // Externals
-extern "C" __declspec(dllexport) void Initialize(double amplitude, 
-												double input_rate, 
-												double output_rate, 
-												int x_pixels, 
-												int y_pixels, 
-												int averages, 
-												int sample_shift,
-												int num_to_save,
-												char* path);
+extern "C" __declspec(dllexport) void Initialize(
+	double amplitude, 
+	double input_rate, 
+	double output_rate, 
+	int x_pixels, 
+	int y_pixels, 
+	int averages, 
+	int sample_shift,
+	int num_to_save,
+	char* path);
 
 extern "C" __declspec(dllexport) void Start();
 extern "C" __declspec(dllexport) void Configure_Display(int channel, float min, float max);
