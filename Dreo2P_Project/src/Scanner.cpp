@@ -468,7 +468,7 @@ void Scanner::Generate_Scan_Waveform()
 	double forward_velocity = (2.0 * amplitude_) / x_pixels_;
 
 	// Compute overshoot pixels
-	int overshoot_pixels = (int)round(forward_velocity * 7500);	// Somewhat arbitrary
+	int overshoot_pixels = floor( (12.5 *  ((2.0 * amplitude_) / 100.0)) / forward_velocity); // 12.5% amplitude overshoot
 	double overshoot_amplitude = amplitude_ + (forward_velocity * overshoot_pixels);
 
 	// Perform Hermite blend interpolation from end of line to start of next line

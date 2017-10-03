@@ -33,6 +33,7 @@ extern "C" __declspec(dllexport) void Initialize(
 
 extern "C" __declspec(dllexport) void Start();
 extern "C" __declspec(dllexport) void Configure_Display(int channel, float min, float max);
+extern "C" __declspec(dllexport) int  Is_Scanning();
 extern "C" __declspec(dllexport) void Stop();
 extern "C" __declspec(dllexport) void Close();
 
@@ -75,6 +76,19 @@ __declspec(dllexport) void Configure_Display(int channel, float min, float max)
 {
 	// Update display parameters
 	scanner.Configure_Display(channel, min, max);
+}
+
+// Check if the scanner is scanning
+__declspec(dllexport) int Is_Scanning()
+{
+	// Check scanning bool
+	if (scanner.Is_Scanning())
+	{
+		return 1;
+	}
+	else {
+		return 0;
+	}
 }
 
 // Stop
