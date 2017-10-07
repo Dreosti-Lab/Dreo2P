@@ -46,7 +46,8 @@ extern "C" __declspec(dllexport) void Close();
 
 // Initialize
 __declspec(dllexport) void Initialize(
-		double amplitude, 
+		double amplitude,
+		double y_offset,
 		double input_rate, 
 		double output_rate, 
 		int x_pixels, 
@@ -60,7 +61,7 @@ __declspec(dllexport) void Initialize(
 	scanner.Configure_Saving(path, num_to_save);
 
 	// Initialize global scnner object
-	scanner.Initialize(amplitude, input_rate, output_rate, x_pixels, y_pixels, averages, sample_shift);
+	scanner.Initialize(amplitude, y_offset, input_rate, output_rate, x_pixels, y_pixels, averages, sample_shift);
 	return;
 }
 
@@ -72,10 +73,12 @@ __declspec(dllexport) void Start()
 }
 
 // Configure display
-__declspec(dllexport) void Configure_Display(int channel, float min, float max)
+__declspec(dllexport) void Configure_Display(int channel, float min, float max, int center_line, int scan_line)
 {
 	// Update display parameters
-	scanner.Configure_Display(channel, min, max);
+	bool center = (center_line == 1) ? true : false;
+	bool scan = (scan_line == 1) ? true : false;
+	scanner.Configure_Display(channel, min, max, center, scan);
 }
 
 // Check if the scanner is scanning

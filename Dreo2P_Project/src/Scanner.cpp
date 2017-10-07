@@ -18,6 +18,7 @@ Scanner::~Scanner()
 // Initialize scanner (and start seperate thread)
 void Scanner::Initialize(
 	double	amplitude,
+	double	y_offset,
 	double	input_rate,
 	double	output_rate,
 	int		x_pixels,
@@ -27,6 +28,7 @@ void Scanner::Initialize(
 {
 	// Set scan parameters
 	amplitude_			= amplitude;
+	y_offset_			= y_offset;
 	input_rate_			= input_rate;
 	output_rate_		= output_rate;
 	x_pixels_			= x_pixels;
@@ -304,6 +306,22 @@ void Scanner::Scanner_Thread_Function()
 				// Set display range
 				display.min_ = min_;
 				display.max_ = max_;
+				if (center_line_)
+				{
+					display.vert_line_ = 0.5f;
+				}
+				else
+				{
+					display.vert_line_ = -1.0f;
+				}
+				if (scan_line_)
+				{
+					display.horz_line_ = (float)current_line/y_pixels_;
+				}
+				else
+				{
+					display.horz_line_ = -1.0f;
+				}
 
 				// Sleep the thread for a bit (no need to update tooooooo quickly)
 				Sleep(16);
@@ -320,7 +338,7 @@ void Scanner::Scanner_Thread_Function()
 		std::cout << "Stopping scanner.\n";
 
 		// If saving, save (averaged) frame to TIFF stack
-		if (images_to_save_ > 0)
+		if ((images_to_save_ > 0) && active_)
 		{
 			// Save frame 0
 			Scanner::Save_Frame_to_32f_1ch_Tiff(frame_0_tiff, frame_ch0, x_pixels_, y_pixels_, current_frame, images_to_save_);
@@ -400,11 +418,13 @@ void Scanner::Close()
 
 
 // Update display parameters
-void Scanner::Configure_Display(int channel, float min, float max)
+void Scanner::Configure_Display(int channel, float min, float max, bool center_line, bool scan_line)
 {
 	min_ = min;
 	max_ = max;
 	display_channel_ = channel;
+	center_line_ = center_line;
+	scan_line_ = scan_line;
 }
 
 
@@ -496,7 +516,7 @@ void Scanner::Generate_Scan_Waveform()
 			scan_waveform_[offset] = (-1.0 * amplitude_) + (forward_velocity * i);
 			offset++;
 			// Y value
-			scan_waveform_[offset] = (-1.0 * amplitude_) + (forward_velocity * j);	// This may not make sense! (assumes X = Y)
+			scan_waveform_[offset] = y_offset_ + (-1.0 * amplitude_) + (forward_velocity * j);	// This may not make sense! (assumes X = Y)
 			offset++;
 		}
 		// Then go from +amp to +overshoot_amp in +velocity steps
@@ -506,7 +526,7 @@ void Scanner::Generate_Scan_Waveform()
 			scan_waveform_[offset] = amplitude_ + (forward_velocity * i);
 			offset++;
 			// Y value
-			scan_waveform_[offset] = (-1.0 * amplitude_) + (forward_velocity * j);	// This may not make sense! (assumes X = Y)
+			scan_waveform_[offset] = y_offset_ + (-1.0 * amplitude_) + (forward_velocity * j);	// This may not make sense! (assumes X = Y)
 			offset++;
 		}
 		// Then insert flyback from +overshoot_amp to -overshoot_amp
@@ -518,7 +538,7 @@ void Scanner::Generate_Scan_Waveform()
 			scan_waveform_[offset] = flyback[i];
 			offset++;
 			// Y value
-			scan_waveform_[offset] = (-1.0 * amplitude_) + (forward_velocity * j);	// This may not make sense! (assumes X = Y)
+			scan_waveform_[offset] = y_offset_ + (-1.0 * amplitude_) + (forward_velocity * j);	// This may not make sense! (assumes X = Y)
 			offset++;
 		}
 		// Then go from -overshoot_amp to -amp in +velocity steps
@@ -528,7 +548,7 @@ void Scanner::Generate_Scan_Waveform()
 			scan_waveform_[offset] = -overshoot_amplitude + (forward_velocity * i);
 			offset++;
 			// Y value
-			scan_waveform_[offset] = (-1.0 * amplitude_) + (forward_velocity * j);	// This may not make sense! (assumes X = Y)
+			scan_waveform_[offset] = y_offset_ + (-1.0 * amplitude_) + (forward_velocity * j);	// This may not make sense! (assumes X = Y)
 			offset++;
 		}
 	}

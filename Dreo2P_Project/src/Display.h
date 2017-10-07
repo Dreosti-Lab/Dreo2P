@@ -34,8 +34,10 @@ public:
 	bool				use_A_ = false;
 	int					frame_width_;
 	int					frame_height_;
-	float				min_ = 0.0f;
-	float				max_ = 0.0f;
+	std::atomic<float>	min_ = 0.0f;
+	std::atomic<float>	max_ = 0.0f;
+	std::atomic<float>	vert_line_ = -1.0f;
+	std::atomic<float>	horz_line_ = -1.0f;
 
 	// Public Methods
 	void Close();
@@ -46,6 +48,7 @@ private:
 	GLuint			vertex_array_object;
 	GLuint			frame_texture_;
 	GLint			min_location, max_location, vpos_location;
+	GLint			vert_line_location, horz_line_location;
 	int				window_width_;
 	int				window_height_;
 

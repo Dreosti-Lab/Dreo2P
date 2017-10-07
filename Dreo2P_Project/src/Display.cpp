@@ -170,6 +170,8 @@ void Display::Initialize_Render()
 		"uniform sampler2D tex;\n"
 		"uniform float min;\n"
 		"uniform float max;\n"
+		"uniform float vert_line;\n"
+		"uniform float horz_line;\n"
 		"in vec2 tex_coord;\n"
 		"out vec4 frag_color;\n"
 		"float val;\n"
@@ -177,6 +179,14 @@ void Display::Initialize_Render()
 		"	val = texture(tex, tex_coord).r;\n"
 		" 	val = (val - min)/(max-min);\n"
 		"	frag_color.rgba = vec4(val);\n"
+		"	if( (tex_coord.y <= horz_line+0.001f) && (tex_coord.y >= horz_line-0.001f) )\n"
+		"	{\n"
+		"		frag_color.b = 1.0f;\n"	
+		"	}\n"
+		"	if( (tex_coord.x <= vert_line+0.001f) && (tex_coord.x >= vert_line-0.001f) )\n"
+		"	{\n"
+		"		frag_color.g = 1.0f;\n"
+		"	}\n"
 		"}\n";
 
 	// Load and compile vertex shader
@@ -219,6 +229,8 @@ void Display::Initialize_Render()
 	// Gather addresses of uniforms (matrices, vertex positions, and colors)
 	min_location = glGetUniformLocation(program, "min");
 	max_location = glGetUniformLocation(program, "max");
+	vert_line_location = glGetUniformLocation(program, "vert_line");
+	horz_line_location = glGetUniformLocation(program, "horz_line");
 
 	return;
 }
@@ -274,6 +286,8 @@ void Display::Render()
 	// Update uniform
 	glUniform1f(min_location, min_);
 	glUniform1f(max_location, max_);
+	glUniform1f(vert_line_location, vert_line_);
+	glUniform1f(horz_line_location, horz_line_);
 
 	// Specify which vertex attribute array object to use
 	glBindVertexArray(vertex_array_object);

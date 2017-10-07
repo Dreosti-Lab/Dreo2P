@@ -27,6 +27,7 @@ public:
 
 	// Public Methods
 	void Initialize(double	amplitude,
+					double	y_offset,
 					double	input_rate,
 					double	output_rate,
 					int		x_pixels,
@@ -37,7 +38,7 @@ public:
 	void Stop();
 	void Close();
 	bool Is_Scanning();
-	void Configure_Display(int channel, float min, float max);
+	void Configure_Display(int channel, float min, float max, bool center_line, bool scan_line);
 	void Configure_Saving(char *path, int images_to_save);
 
 private:
@@ -49,6 +50,7 @@ private:
 	// Private Members (scan parameters)
 	double*	scan_waveform_;
 	double	amplitude_;
+	double	y_offset_;
 	double	input_rate_;		// Number of samples per second
 	double	output_rate_;		// Number of pixels per second
 	int		bin_factor_;		// Ratio of samples per pixel (must be integer)
@@ -64,10 +66,12 @@ private:
 	int		frames_to_average_;
 
 	// Private members (display control)
-	int		display_channel_ = 0;
-	int		sample_shift_ = 0;
-	float	min_ = 0.0f;
-	float	max_ = 1.0f;
+	int					display_channel_ = 0;
+	int					sample_shift_ = 0;
+	float				min_ = 0.0f;
+	float				max_ = 0.0f;
+	bool				center_line_ = false;
+	bool				scan_line_ = false;
 
 	// Private members (TIFF)
 	int					images_to_save_ = 0;
