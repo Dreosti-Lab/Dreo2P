@@ -73,12 +73,12 @@ __declspec(dllexport) void Start()
 }
 
 // Configure display
-__declspec(dllexport) void Configure_Display(int channel, float min, float max, int center_line, int scan_line)
+__declspec(dllexport) void Configure_Display(int channel, float min, float max, int centre_cross, int scan_line)
 {
 	// Update display parameters
-	bool center = (center_line == 1) ? true : false;
+	bool centre = (centre_cross == 1) ? true : false;
 	bool scan = (scan_line == 1) ? true : false;
-	scanner.Configure_Display(channel, min, max, center, scan);
+	scanner.Configure_Display(channel, min, max, centre, scan);
 }
 
 // Check if the scanner is scanning

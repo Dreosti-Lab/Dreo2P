@@ -170,7 +170,7 @@ void Display::Initialize_Render()
 		"uniform sampler2D tex;\n"
 		"uniform float min;\n"
 		"uniform float max;\n"
-		"uniform float vert_line;\n"
+		"uniform float centre_cross;\n"
 		"uniform float horz_line;\n"
 		"in vec2 tex_coord;\n"
 		"out vec4 frag_color;\n"
@@ -181,11 +181,15 @@ void Display::Initialize_Render()
 		"	frag_color.rgba = vec4(val);\n"
 		"	if( (tex_coord.y <= horz_line+0.001f) && (tex_coord.y >= horz_line-0.001f) )\n"
 		"	{\n"
-		"		frag_color.b = 1.0f;\n"	
+		"		frag_color.b = 0.5f;\n"	
 		"	}\n"
-		"	if( (tex_coord.x <= vert_line+0.001f) && (tex_coord.x >= vert_line-0.001f) )\n"
+		"	if( (tex_coord.x <= centre_cross+0.001f) && (tex_coord.x >= centre_cross-0.001f) )\n"
 		"	{\n"
-		"		frag_color.g = 1.0f;\n"
+		"		frag_color.g = 0.5f;\n"
+		"	}\n"
+		"	if( (tex_coord.y <= centre_cross+0.001f) && (tex_coord.y >= centre_cross-0.001f) )\n"
+		"	{\n"
+		"		frag_color.g = 0.5f;\n"
 		"	}\n"
 		"}\n";
 
@@ -229,7 +233,7 @@ void Display::Initialize_Render()
 	// Gather addresses of uniforms (matrices, vertex positions, and colors)
 	min_location = glGetUniformLocation(program, "min");
 	max_location = glGetUniformLocation(program, "max");
-	vert_line_location = glGetUniformLocation(program, "vert_line");
+	centre_cross_location = glGetUniformLocation(program, "centre_cross");
 	horz_line_location = glGetUniformLocation(program, "horz_line");
 
 	return;
@@ -286,7 +290,7 @@ void Display::Render()
 	// Update uniform
 	glUniform1f(min_location, min_);
 	glUniform1f(max_location, max_);
-	glUniform1f(vert_line_location, vert_line_);
+	glUniform1f(centre_cross_location, centre_cross_);
 	glUniform1f(horz_line_location, horz_line_);
 
 	// Specify which vertex attribute array object to use

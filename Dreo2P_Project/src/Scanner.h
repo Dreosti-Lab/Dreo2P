@@ -38,7 +38,7 @@ public:
 	void Stop();
 	void Close();
 	bool Is_Scanning();
-	void Configure_Display(int channel, float min, float max, bool center_line, bool scan_line);
+	void Configure_Display(int channel, float min, float max, bool centre_cross, bool scan_line);
 	void Configure_Saving(char *path, int images_to_save);
 
 private:
@@ -70,7 +70,7 @@ private:
 	int					sample_shift_ = 0;
 	float				min_ = 0.0f;
 	float				max_ = 0.0f;
-	bool				center_line_ = false;
+	bool				centre_cross_ = false;
 	bool				scan_line_ = false;
 
 	// Private members (TIFF)

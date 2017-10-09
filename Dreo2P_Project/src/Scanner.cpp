@@ -306,13 +306,13 @@ void Scanner::Scanner_Thread_Function()
 				// Set display range
 				display.min_ = min_;
 				display.max_ = max_;
-				if (center_line_)
+				if (centre_cross_)
 				{
-					display.vert_line_ = 0.5f;
+					display.centre_cross_ = 0.5f;
 				}
 				else
 				{
-					display.vert_line_ = -1.0f;
+					display.centre_cross_ = -1.0f;
 				}
 				if (scan_line_)
 				{
@@ -418,12 +418,12 @@ void Scanner::Close()
 
 
 // Update display parameters
-void Scanner::Configure_Display(int channel, float min, float max, bool center_line, bool scan_line)
+void Scanner::Configure_Display(int channel, float min, float max, bool centre_cross, bool scan_line)
 {
 	min_ = min;
 	max_ = max;
 	display_channel_ = channel;
-	center_line_ = center_line;
+	centre_cross_ = centre_cross;
 	scan_line_ = scan_line;
 }
 
