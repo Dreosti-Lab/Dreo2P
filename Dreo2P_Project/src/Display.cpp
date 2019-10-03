@@ -86,10 +86,10 @@ void Display::Initialize_Window(int width, int height)
 	// Report graphics hardware and OpenGL version info
 	const GLubyte* renderer = glGetString(GL_RENDERER); // get renderer string
 	const GLubyte* version = glGetString(GL_VERSION); // version as a string
-	printf("OpenGL:\n");
-	printf("-------\n");
-	printf("Renderer: %s\n", renderer);
-	printf("OpenGL version supported: %s\n", version);
+	//printf("OpenGL:\n");
+	//printf("-------\n");
+	//printf("Renderer: %s\n", renderer);
+	//printf("OpenGL version supported: %s\n", version);
 
 	// Tell GL to only draw onto a pixel if the shape is closer to the viewer
 	glEnable(GL_DEPTH_TEST); // enable depth-testing
@@ -199,15 +199,15 @@ void Display::Initialize_Render()
 	glCompileShader(vertex_shader);
 	
 	// Report shader and log (errors?)
-	std::cout << "\nVertex Shader:\n";
-	printf(vertex_shader_text);
-	std::cout << "Log:\n";
+	//std::cout << "\nVertex Shader:\n";
+	//printf(vertex_shader_text);
+	//std::cout << "Log:\n";
 	int log_length;
 	glGetShaderiv(vertex_shader, GL_INFO_LOG_LENGTH, &log_length);
 	char* buffer = (char*)malloc(sizeof(char) * log_length);
 	glGetShaderInfoLog(vertex_shader, log_length, &log_length, buffer);
-	printf(buffer);
-	std::cout << "\n--------------\n";
+	//printf(buffer);
+	//std::cout << "\n--------------\n";
 
 	// Load and compile fragment shader
 	fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);
@@ -215,14 +215,14 @@ void Display::Initialize_Render()
 	glCompileShader(fragment_shader);
 
 	// Report shader and log (errors?)
-	std::cout << "\nFragment Shader:\n";
-	printf(fragment_shader_text);
-	std::cout << "Log:\n";
+	//std::cout << "\nFragment Shader:\n";
+	//printf(fragment_shader_text);
+	//std::cout << "Log:\n";
 	glGetShaderiv(fragment_shader, GL_INFO_LOG_LENGTH, &log_length);
 	buffer = (char*)malloc(sizeof(char) * log_length);
 	glGetShaderInfoLog(fragment_shader, log_length, &log_length, buffer);
-	printf(buffer);
-	std::cout << "\n===============\n";
+	//printf(buffer);
+	//std::cout << "\n===============\n";
 
 	// Attach shaders to a "program"
 	program = glCreateProgram();
@@ -325,5 +325,5 @@ void Display::Close()
 // Display error handler
 void Display::Error_Handler(int error, const char* description)
 {
-	fprintf(stderr, "Display Error: %s\n", description);
+	//fprintf(stderr, "Display Error: %s\n", description);
 }

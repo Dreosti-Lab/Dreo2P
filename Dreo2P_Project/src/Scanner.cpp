@@ -42,7 +42,7 @@ void Scanner::Initialize(
 
 	// Generate scan pattern
 	Generate_Scan_Waveform();
-	Save_Scan_Waveform("waveform.csv", scan_waveform_);
+	//Save_Scan_Waveform("waveform.csv", scan_waveform_);
 
 	// Create and start digital output task (shutter controller)
 	DAQmxCreateTask("", &DO_taskHandle_);
@@ -145,7 +145,7 @@ void Scanner::Scanner_Thread_Function()
 		Reset_Mirrors();
 
 		// Wait for start signal
-		std::cout << "Waiting for start...";
+		//std::cout << "Waiting for start...";
 		while (!scanning_ && active_)
 		{
 			Sleep(32);
@@ -170,7 +170,7 @@ void Scanner::Scanner_Thread_Function()
 				// Start hardware acqusition
 				status = DAQmxStartTask(AI_taskHandle_);
 				if (status) { Error_Handler(status, "AI Task start"); }
-				std::cout << "Starting scanner.\n";
+				//std::cout << "Starting scanner.\n";
 
 				// Read available input samples (on all channels) and discard!
 				status = DAQmxReadAnalogF64(AI_taskHandle_, sample_shift_, 1.0, DAQmx_Val_GroupByScanNumber, &input_buffer[0], buffer_size, &num_read_samples, NULL);
@@ -196,7 +196,7 @@ void Scanner::Scanner_Thread_Function()
 				if (current_line == y_pixels_)
 				{
 					// Report progress
-					std::cout << "Frame: " << current_frame + 1 << " of " << frames_to_average_ << std::endl;
+					//std::cout << "Frame: " << current_frame + 1 << " of " << frames_to_average_ << std::endl;
 
 					// Reset scan_line pointer
 					current_line = 0;
@@ -335,7 +335,7 @@ void Scanner::Scanner_Thread_Function()
 		DAQmxStopTask(AO_taskHandle_);
 		status = DAQmxStopTask(AI_taskHandle_);
 		if (status) { Error_Handler(status, "AI/AO Task stop"); }
-		std::cout << "Stopping scanner.\n";
+		//std::cout << "Stopping scanner.\n";
 
 		// If saving, save (averaged) frame to TIFF stack
 		if ((images_to_save_ > 0) && active_)
@@ -347,7 +347,7 @@ void Scanner::Scanner_Thread_Function()
 			Scanner::Save_Frame_to_32f_1ch_Tiff(frame_1_tiff, frame_ch1, x_pixels_, y_pixels_, current_frame, images_to_save_);
 			
 			// Report saving
-			std::cout << "Saving averaged frame.\n\n";
+			//std::cout << "Saving averaged frame.\n\n";
 		}
 
 		// Go back and wait for the next "start" signal
@@ -552,6 +552,10 @@ void Scanner::Generate_Scan_Waveform()
 			offset++;
 		}
 	}
+
+	// Cleanup
+	free(flyback);
+
 	return;
 }
 
@@ -686,7 +690,7 @@ void Scanner::Save_Frame_to_32f_1ch_Tiff(TIFF *tiff_file, std::vector<float> dat
 void Scanner::Error_Handler(int error, const char* description)
 {
 		// Report error
-		fprintf(stderr, "Scnner Error (%i): %s\n", error, description);
+		//fprintf(stderr, "Scnner Error (%i): %s\n", error, description);
 
 		// Close gracefully
 		Scanner::Close();
